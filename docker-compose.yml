@@ -1,0 +1,13 @@
+services:
+  cockpit:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      # Shared state: host ~/.operator-state/ mounted into container as /state
+      # Claude Code writes here natively; OpenClaw container reads/writes via /state
+      - "${HOME}/.operator-state:/state"
+    environment:
+      - NODE_ENV=production
+      - OPERATOR_STATE_DIR=/state
+    restart: unless-stopped
