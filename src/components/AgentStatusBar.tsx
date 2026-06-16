@@ -149,6 +149,7 @@ export function AgentStatusBar({ agents, connected, usingMockData }: AgentStatus
             <option value="deepseek">DeepSeek</option>
             <option value="llama">Llama 4</option>
             <option value="qwen">Qwen 3</option>
+            <option value="kimi">Kimi K</option>
           </select>
           <input
             type="text"
