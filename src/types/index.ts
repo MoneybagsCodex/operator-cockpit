@@ -1,5 +1,5 @@
 // Source tag for events written from different surfaces
-export type AgentEventSource = 'api' | 'file' | 'github-actions' | 'jarvis' | 'claude-code' | 'openclaw';
+export type AgentEventSource = 'api' | 'file' | 'github-actions' | 'bridge' | 'claude-code' | 'custom';
 
 // Agent Event Types
 export type AgentEventType =

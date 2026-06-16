@@ -35,7 +35,7 @@ State lives in files. Any process that can write a JSON file can emit events. Th
 ## Quick start
 
 ```bash
-git clone https://github.com/MoneybagsCodex/operator-cockpit
+git clone https://github.com/your-username/operator-cockpit
 cd operator-cockpit
 npm install
 cp .env.example .env.local   # add ANTHROPIC_API_KEY
@@ -68,7 +68,7 @@ The cockpit ships with two swappable chat backends:
 
 | `CHAT_BACKEND` | Routes to | Use when |
 |---|---|---|
-| `bridge` (default) | Custom bridge process on port 3001 | Running your own agent process (OpenClaw, LiteLLM, etc.) |
+| `bridge` (default) | Custom bridge process on port 3001 | Running your own agent process (LiteLLM, custom bridge, etc.) |
 | `anthropic` | Anthropic API directly | Claude Code at work, no bridge needed |
 
 ## Adding agents

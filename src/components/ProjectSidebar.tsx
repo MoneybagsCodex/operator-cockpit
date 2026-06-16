@@ -17,10 +17,10 @@ export function ProjectSidebar({
 }: ProjectSidebarProps) {
   const getAgentColor = (agentName: string) => {
     const colorMap: Record<string, string> = {
-      ARCHITECT: 'bg-purple-600',
-      JARVIS: 'bg-cyan-600',
-      'Job Discovery': 'bg-blue-600',
-      'Workspace Auditor': 'bg-pink-600',
+      Architect: 'bg-purple-600',
+      Ops: 'bg-cyan-600',
+      Researcher: 'bg-blue-600',
+      Auditor: 'bg-pink-600',
     };
     return colorMap[agentName] || 'bg-gray-600';
   };

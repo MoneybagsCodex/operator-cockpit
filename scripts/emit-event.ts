@@ -2,7 +2,7 @@
 /**
  * emit-event — write an agent event to the operator state directory
  *
- * Usage (from any Claude Code subagent or OpenClaw container):
+ * Usage (from any Claude Code subagent or agent process):
  *   npx tsx /path/to/scripts/emit-event.ts \
  *     --agent architect-001 \
  *     --agent-name ARCHITECT \

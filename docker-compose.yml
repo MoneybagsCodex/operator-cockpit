@@ -5,7 +5,7 @@ services:
       - "3000:3000"
     volumes:
       # Shared state: host ~/.operator-state/ mounted into container as /state
-      # Claude Code writes here natively; OpenClaw container reads/writes via /state
+      # Claude Code hooks and agent processes write here; container reads the same files
       - "${HOME}/.operator-state:/state"
     environment:
       - NODE_ENV=production
