@@ -56,7 +56,7 @@ export default function Dashboard() {
             <ApprovalQueue approvals={approvals} agents={displayAgents} onDecide={decide} />
           </div>
 
-          <div className={`flex-1 grid gap-4 overflow-hidden ${displayProjects.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+          <div className={`flex-1 grid gap-4 overflow-hidden ${displayProjects.length === 1 ? 'grid-cols-1' : displayProjects.length <= 4 ? 'grid-cols-2' : 'grid-cols-3'}`}>
             {displayProjects.map((project) => {
               const agent = displayAgents.find((a) => a.id === project.assignedAgent);
               const projectMessages = getChatMessages(project.id);
