@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import { AgentEvent, ApprovalRequest, Agent, Project, ChatMessage, DashboardState } from '@/src/types';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { AgentEvent, ApprovalRequest, Agent, Project, ChatMessage, DashboardState, LearnedThreshold } from '@/src/types';
 import { mockDashboardState } from '@/src/data/mock';
 
 interface LiveState {
@@ -12,6 +12,7 @@ interface LiveState {
   chat: Record<string, ChatMessage[]>;
   connected: boolean;
   usingMockData: boolean;
+  preferences: LearnedThreshold[];
 }
 
 function deserializeDates<T extends Record<string, unknown>>(obj: T): T {
@@ -25,6 +26,13 @@ function deserializeDates<T extends Record<string, unknown>>(obj: T): T {
   return result;
 }
 
+const TRUST_BASELINE: Record<string, string[]> = {
+  monitor:     [],
+  assistant:   ['low'],
+  autonomous:  ['low', 'medium'],
+  'full-auto': ['low', 'medium', 'high'],
+};
+
 export function useLiveState(): LiveState & {
   decide: (id: string, decision: 'approved' | 'rejected' | 'needs-revision', notes?: string) => Promise<void>;
 } {
@@ -36,9 +44,11 @@ export function useLiveState(): LiveState & {
     chat: {},
     connected: false,
     usingMockData: true,
+    preferences: [],
   });
 
   const esRef = useRef<EventSource | null>(null);
+  const autoApprovedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const es = new EventSource('/api/stream');
@@ -111,13 +121,42 @@ export function useLiveState(): LiveState & {
     };
   }, []);
 
-  const decide = async (id: string, decision: 'approved' | 'rejected' | 'needs-revision', notes?: string) => {
+  const decide = useCallback(async (id: string, decision: 'approved' | 'rejected' | 'needs-revision', notes?: string) => {
     await fetch(`/api/approvals/${id}/decide`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ decision, notes }),
     });
-  };
+  }, []);
+
+  // Load preferences once on mount
+  useEffect(() => {
+    fetch('/api/preferences')
+      .then((r) => r.json())
+      .then((prefs: LearnedThreshold[]) => setState((prev) => ({ ...prev, preferences: prefs })))
+      .catch(() => {});
+  }, []);
+
+  // Auto-approve pending items that fall below the agent's threshold
+  useEffect(() => {
+    const pending = state.approvals.filter((a) => a.status === 'pending');
+    for (const approval of pending) {
+      if (autoApprovedRef.current.has(approval.id)) continue;
+      const agent = state.agents.find((a) => a.id === approval.agentId);
+      const trustLevel = agent?.trustLevel ?? 'monitor';
+      const learned = state.preferences.find(
+        (p) => p.agentId === approval.agentId && p.riskLevel === approval.riskLevel
+      );
+      const shouldAuto = learned
+        ? learned.autoApprove
+        : (TRUST_BASELINE[trustLevel] ?? []).includes(approval.riskLevel);
+
+      if (shouldAuto) {
+        autoApprovedRef.current.add(approval.id);
+        decide(approval.id, 'approved').catch(() => {});
+      }
+    }
+  }, [state.approvals, state.agents, state.preferences, decide]);
 
   return { ...state, decide };
 }

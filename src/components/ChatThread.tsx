@@ -97,25 +97,44 @@ export function ChatThread({ project, agent, messages, events, highlighted, onCl
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {agent && (
-            <select
-              value={agent.model || 'sonnet'}
-              onChange={async (e) => {
-                await fetch('/api/agents/model', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ agentId: agent.id, model: e.target.value }),
-                });
-              }}
-              className="bg-slate-700 text-slate-300 text-xs px-1.5 py-1 rounded border border-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
-              title="Switch model for this agent"
-            >
-              <option value="sonnet">Sonnet</option>
-              <option value="deepseek">DeepSeek</option>
-              <option value="llama">Llama</option>
-              <option value="qwen">Qwen</option>
-              <option value="kimi">Kimi K</option>
-              <option value="mistral">Mistral</option>
-            </select>
+            <>
+              <select
+                value={agent.trustLevel || 'monitor'}
+                onChange={async (e) => {
+                  await fetch('/api/agents/trust', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ agentId: agent.id, trustLevel: e.target.value }),
+                  });
+                }}
+                className="bg-slate-700 text-slate-300 text-xs px-1.5 py-1 rounded border border-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                title="Trust level — controls what this agent auto-approves"
+              >
+                <option value="monitor">👁 Monitor</option>
+                <option value="assistant">🤝 Assistant</option>
+                <option value="autonomous">⚡ Autonomous</option>
+                <option value="full-auto">🚀 Full auto</option>
+              </select>
+              <select
+                value={agent.model || 'sonnet'}
+                onChange={async (e) => {
+                  await fetch('/api/agents/model', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ agentId: agent.id, model: e.target.value }),
+                  });
+                }}
+                className="bg-slate-700 text-slate-300 text-xs px-1.5 py-1 rounded border border-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                title="Switch model for this agent"
+              >
+                <option value="sonnet">Sonnet</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="llama">Llama</option>
+                <option value="qwen">Qwen</option>
+                <option value="kimi">Kimi K</option>
+                <option value="mistral">Mistral</option>
+              </select>
+            </>
           )}
           {onClose && (
             <button

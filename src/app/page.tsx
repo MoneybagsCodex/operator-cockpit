@@ -10,7 +10,7 @@ import { useLiveState } from '@/src/hooks/useLiveState';
 import { useState } from 'react';
 
 export default function Dashboard() {
-  const { events, approvals, agents, projects, chat, connected, usingMockData, decide } = useLiveState();
+  const { events, approvals, agents, projects, chat, connected, usingMockData, decide, preferences } = useLiveState();
   const [closedProjects, setClosedProjects] = useState<Set<string>>(new Set());
 
   const pendingApprovals = approvals.filter((a) => a.status === 'pending');
@@ -60,7 +60,7 @@ export default function Dashboard() {
               chat={chat}
               events={events}
             />
-            <ApprovalQueue approvals={approvals} agents={displayAgents} onDecide={decide} />
+            <ApprovalQueue approvals={approvals} agents={displayAgents} preferences={preferences} onDecide={decide} />
           </div>
 
           <div className={`flex-1 grid gap-4 overflow-hidden ${displayProjects.length === 1 ? 'grid-cols-1' : displayProjects.length <= 4 ? 'grid-cols-2' : 'grid-cols-3'}`}>

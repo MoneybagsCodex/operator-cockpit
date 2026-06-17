@@ -1,6 +1,21 @@
 // Source tag for events written from different surfaces
 export type AgentEventSource = 'api' | 'file' | 'github-actions' | 'bridge' | 'claude-code' | 'custom';
 
+// How much autonomy an agent has — manual starting point, refined by learned preferences
+export type TrustLevel = 'monitor' | 'assistant' | 'autonomous' | 'full-auto';
+
+// Learned confidence for a specific (agent, risk) combination
+export interface LearnedThreshold {
+  agentId: string;
+  riskLevel: ApprovalRiskLevel;
+  approvals: number;
+  rejections: number;
+  revisions: number;
+  confidence: number; // 0–1
+  autoApprove: boolean; // true when confidence > 0.85 and total >= 5
+  lastDecision: string;
+}
+
 // Agent Event Types
 export type AgentEventType =
   | 'task-started'
@@ -29,6 +44,7 @@ export interface Agent {
   currentStage?: TaskStage;
   projectId: string;
   model?: string;
+  trustLevel?: TrustLevel;
 }
 
 // Project

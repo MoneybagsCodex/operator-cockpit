@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { decideApproval } from '@/src/lib/state';
 import { ApprovalStatus } from '@/src/types';
+import { logDecision } from '@/src/lib/preferences';
 
 export async function POST(
   req: NextRequest,
@@ -16,6 +17,16 @@ export async function POST(
   if (!updated) {
     return NextResponse.json({ error: `Approval ${params.id} not found` }, { status: 404 });
   }
+
+  // Log to decision history so preferences can be learned
+  logDecision({
+    id: params.id,
+    agentId: updated.agentId,
+    riskLevel: updated.riskLevel,
+    decision: decision as 'approved' | 'rejected' | 'needs-revision',
+    action: updated.action,
+    decidedAt: new Date().toISOString(),
+  });
 
   return NextResponse.json({ ok: true, approval: updated });
 }

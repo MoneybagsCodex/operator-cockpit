@@ -1,16 +1,17 @@
 'use client';
 
-import { ApprovalRequest, Agent } from '@/src/types';
+import { ApprovalRequest, Agent, LearnedThreshold } from '@/src/types';
 import { CheckCircle2, XCircle, AlertCircle, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
 interface ApprovalQueueProps {
   approvals: ApprovalRequest[];
   agents: Agent[];
+  preferences?: LearnedThreshold[];
   onDecide?: (id: string, decision: 'approved' | 'rejected' | 'needs-revision') => Promise<void>;
 }
 
-export function ApprovalQueue({ approvals, agents, onDecide }: ApprovalQueueProps) {
+export function ApprovalQueue({ approvals, agents, preferences = [], onDecide }: ApprovalQueueProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deciding, setDeciding] = useState<Set<string>>(new Set());
 
@@ -91,7 +92,23 @@ export function ApprovalQueue({ approvals, agents, onDecide }: ApprovalQueueProp
                       <p className="text-sm text-slate-100 font-medium leading-snug line-clamp-2">
                         {approval.action}
                       </p>
-                      {agent && <p className="text-xs text-slate-400 mt-0.5">{agent.name}</p>}
+                      {agent && (
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <p className="text-xs text-slate-400">{agent.name}</p>
+                          {(() => {
+                            const p = preferences.find(
+                              (p) => p.agentId === approval.agentId && p.riskLevel === approval.riskLevel
+                            );
+                            if (!p || p.approvals + p.rejections + p.revisions < 2) return null;
+                            const pct = Math.round(p.confidence * 100);
+                            return (
+                              <span className={`text-xs px-1 py-0.5 rounded ${p.confidence >= 0.85 ? 'bg-green-900/50 text-green-400' : p.confidence >= 0.5 ? 'bg-yellow-900/50 text-yellow-400' : 'bg-red-900/50 text-red-400'}`}>
+                                {pct}% approve rate
+                              </span>
+                            );
+                          })()}
+                        </div>
+                      )}
                     </div>
                   </div>
 
