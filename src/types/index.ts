@@ -28,6 +28,7 @@ export interface Agent {
   currentTask?: string;
   currentStage?: TaskStage;
   projectId: string;
+  model?: string;
 }
 
 // Project

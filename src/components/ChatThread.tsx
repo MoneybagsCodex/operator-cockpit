@@ -95,15 +95,38 @@ export function ChatThread({ project, agent, messages, events, highlighted, onCl
           <h3 className="text-base font-semibold text-slate-100 truncate">{project.name}</h3>
           {agent && <p className="text-xs text-slate-400">{agent.name}</p>}
         </div>
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="text-slate-500 hover:text-slate-300 transition-colors flex-shrink-0 mt-0.5"
-            title="Close panel"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {agent && (
+            <select
+              value={agent.model || 'sonnet'}
+              onChange={async (e) => {
+                await fetch('/api/agents/model', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ agentId: agent.id, model: e.target.value }),
+                });
+              }}
+              className="bg-slate-700 text-slate-300 text-xs px-1.5 py-1 rounded border border-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
+              title="Switch model for this agent"
+            >
+              <option value="sonnet">Sonnet</option>
+              <option value="deepseek">DeepSeek</option>
+              <option value="llama">Llama</option>
+              <option value="qwen">Qwen</option>
+              <option value="kimi">Kimi K</option>
+              <option value="mistral">Mistral</option>
+            </select>
+          )}
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="text-slate-500 hover:text-slate-300 transition-colors"
+              title="Close panel"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Chat Thread */}

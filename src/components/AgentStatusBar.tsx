@@ -106,6 +106,28 @@ export function AgentStatusBar({ agents, connected, usingMockData }: AgentStatus
           <span className={`text-xs px-2 py-1 rounded ${connected ? 'text-green-400' : 'text-slate-500'}`}>
             {connected ? '● live' : '○ connecting...'}
           </span>
+          <select
+            onChange={async (e) => {
+              if (!e.target.value) return;
+              await fetch('/api/agents/model', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: e.target.value }),
+              });
+              e.target.value = '';
+            }}
+            defaultValue=""
+            className="bg-slate-700 text-slate-300 text-xs px-2 py-1 rounded border border-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
+            title="Set model for all agents"
+          >
+            <option value="" disabled>All: model…</option>
+            <option value="sonnet">Sonnet</option>
+            <option value="deepseek">DeepSeek</option>
+            <option value="llama">Llama</option>
+            <option value="qwen">Qwen</option>
+            <option value="kimi">Kimi K</option>
+            <option value="mistral">Mistral</option>
+          </select>
           <button
             onClick={() => setShowForm((v) => !v)}
             className="flex items-center gap-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded transition-colors"
