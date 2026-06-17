@@ -5,6 +5,7 @@ import { Send, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useAvailableModels } from '@/src/hooks/useAvailableModels';
+import { ModelPicker } from '@/src/components/ModelPicker';
 
 interface ChatThreadProps {
   project?: Project;
@@ -117,22 +118,17 @@ export function ChatThread({ project, agent, messages, events, highlighted, onCl
                 <option value="autonomous">⚡ Autonomous</option>
                 <option value="full-auto">🚀 Full auto</option>
               </select>
-              <select
+              <ModelPicker
                 value={agent.model || 'sonnet'}
-                onChange={async (e) => {
+                models={availableModels}
+                onChange={async (model) => {
                   await fetch('/api/agents/model', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ agentId: agent.id, model: e.target.value }),
+                    body: JSON.stringify({ agentId: agent.id, model }),
                   });
                 }}
-                className="bg-slate-700 text-slate-300 text-xs px-1.5 py-1 rounded border border-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
-                title="Switch model for this agent"
-              >
-                {availableModels.map((m) => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
-              </select>
+              />
             </>
           )}
           {onClose && (

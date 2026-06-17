@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 export interface ModelOption {
   value: string;
   label: string;
+  submodels?: { value: string; label: string }[];
 }
 
 const DEFAULT: ModelOption[] = [{ value: 'sonnet', label: 'Sonnet' }];

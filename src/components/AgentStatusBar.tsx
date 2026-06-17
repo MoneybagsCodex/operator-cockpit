@@ -2,6 +2,7 @@
 
 import { Agent } from '@/src/types';
 import { Circle, Plus, X } from 'lucide-react';
+import { ModelPicker } from '@/src/components/ModelPicker';
 import { useState, useEffect } from 'react';
 import { useAvailableModels } from '@/src/hooks/useAvailableModels';
 
@@ -128,9 +129,17 @@ export function AgentStatusBar({ agents, connected, usingMockData }: AgentStatus
             title="Set model for all agents"
           >
             <option value="" disabled>All: model…</option>
-            {availableModels.map((m) => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
+            {availableModels.map((m) =>
+              m.submodels ? (
+                <optgroup key={m.label} label={m.label}>
+                  {m.submodels.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </optgroup>
+              ) : (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              )
+            )}
           </select>
           <button
             onClick={() => setShowForm((v) => !v)}
@@ -166,15 +175,12 @@ export function AgentStatusBar({ agents, connected, usingMockData }: AgentStatus
               className="w-40 bg-slate-700 text-slate-100 px-3 py-1.5 text-sm rounded focus:outline-none focus:ring-1 focus:ring-blue-600 placeholder-slate-500"
             />
           </div>
-          <select
-            value={form.model}
-            onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
-            className="bg-slate-700 text-slate-100 px-2 py-1.5 text-sm rounded focus:outline-none focus:ring-1 focus:ring-blue-600"
-          >
-            {availableModels.map((m) => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
-          </select>
+          <ModelPicker
+            value={form.model || availableModels[0]?.value || 'sonnet'}
+            models={availableModels}
+            onChange={(model) => setForm((f) => ({ ...f, model }))}
+            className="bg-slate-700 text-slate-100 text-sm px-2 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-600 flex items-center gap-1"
+          />
           <input
             type="text"
             placeholder="System prompt (optional — defaults to generic assistant)"
