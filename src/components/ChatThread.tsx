@@ -4,6 +4,7 @@ import { Project, Agent, ChatMessage, AgentEvent } from '@/src/types';
 import { Send, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { useAvailableModels } from '@/src/hooks/useAvailableModels';
 
 interface ChatThreadProps {
   project?: Project;
@@ -18,6 +19,7 @@ export function ChatThread({ project, agent, messages, events, highlighted, onCl
   const [mounted, setMounted] = useState(false);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const availableModels = useAvailableModels();
 
   useEffect(() => {
     setMounted(true);
@@ -127,12 +129,9 @@ export function ChatThread({ project, agent, messages, events, highlighted, onCl
                 className="bg-slate-700 text-slate-300 text-xs px-1.5 py-1 rounded border border-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
                 title="Switch model for this agent"
               >
-                <option value="sonnet">Sonnet</option>
-                <option value="deepseek">DeepSeek</option>
-                <option value="llama">Llama</option>
-                <option value="qwen">Qwen</option>
-                <option value="kimi">Kimi K</option>
-                <option value="mistral">Mistral</option>
+                {availableModels.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
               </select>
             </>
           )}

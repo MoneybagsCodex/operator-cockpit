@@ -1,6 +1,7 @@
 'use client';
 
 import { Project, Agent, ChatMessage, AgentEvent } from '@/src/types';
+import { useEffect, useState, useRef } from 'react';
 
 interface StatusSummaryProps {
   projects: Project[];
@@ -9,24 +10,53 @@ interface StatusSummaryProps {
   events: AgentEvent[];
 }
 
+async function summarizeConversation(messages: ChatMessage[]): Promise<string> {
+  const recent = messages.slice(-6);
+  const transcript = recent
+    .map((m) => `${m.sender === 'user' ? 'User' : 'Agent'}: ${m.message}`)
+    .join('\n');
+
+  const res = await fetch('/api/summarize', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transcript }),
+  });
+  if (!res.ok) throw new Error('summarize failed');
+  const data = await res.json();
+  return data.summary as string;
+}
+
 export function StatusSummary({ projects, agents, chat, events }: StatusSummaryProps) {
-  const getOneLiner = (project: Project): string => {
-    // Last agent message in this project's chat
+  const [summaries, setSummaries] = useState<Record<string, string>>({});
+  // Track last message count per project so we only re-summarize when content changes
+  const lastMsgCount = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    for (const project of projects) {
+      const msgs = chat[project.id] || [];
+      const prev = lastMsgCount.current[project.id] ?? -1;
+      if (msgs.length === 0 || msgs.length === prev) continue;
+      lastMsgCount.current[project.id] = msgs.length;
+
+      summarizeConversation(msgs)
+        .then((summary) => setSummaries((s) => ({ ...s, [project.id]: summary })))
+        .catch(() => {});
+    }
+  }, [chat, projects]);
+
+  const getFallback = (project: Project): string => {
     const msgs = (chat[project.id] || []).filter((m) => m.sender === 'agent');
     if (msgs.length > 0) {
-      const last = msgs[msgs.length - 1].message;
-      // Strip markdown and truncate
-      const plain = last.replace(/[#*`_~\[\]()>]/g, '').replace(/\s+/g, ' ').trim();
+      const plain = msgs[msgs.length - 1].message
+        .replace(/[#*`_~\[\]()>]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
       return plain.length > 90 ? plain.slice(0, 87) + '…' : plain;
     }
-
-    // Fall back to latest event
     const projectEvents = events
       .filter((e) => e.projectId === project.id)
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     if (projectEvents.length > 0) return projectEvents[0].title;
-
-    // Fall back to project metadata
     return project.nextAction || project.status;
   };
 
@@ -46,6 +76,7 @@ export function StatusSummary({ projects, agents, chat, events }: StatusSummaryP
       <div className="space-y-2">
         {projects.map((project) => {
           const agent = agents.find((a) => a.id === project.assignedAgent);
+          const summary = summaries[project.id] || getFallback(project);
           return (
             <div key={project.id} className="flex items-start gap-2">
               <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 ${getStatusDot(project)}`} />
@@ -55,7 +86,7 @@ export function StatusSummary({ projects, agents, chat, events }: StatusSummaryP
                   {agent && <span className="text-slate-500 font-normal"> · {agent.name}</span>}
                 </p>
                 <p className="text-xs text-slate-500 leading-snug mt-0.5 line-clamp-2">
-                  {getOneLiner(project)}
+                  {summary}
                 </p>
               </div>
             </div>

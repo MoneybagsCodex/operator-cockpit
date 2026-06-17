@@ -3,6 +3,7 @@
 import { Agent } from '@/src/types';
 import { Circle, Plus, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useAvailableModels } from '@/src/hooks/useAvailableModels';
 
 interface AgentStatusBarProps {
   agents: Agent[];
@@ -13,10 +14,16 @@ interface AgentStatusBarProps {
 export function AgentStatusBar({ agents, connected, usingMockData }: AgentStatusBarProps) {
   const [mounted, setMounted] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', emoji: '🤖', model: 'sonnet', prompt: '' });
+  const [form, setForm] = useState({ name: '', emoji: '🤖', model: '', prompt: '' });
   const [creating, setCreating] = useState(false);
+  const availableModels = useAvailableModels();
 
   useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    if (availableModels.length > 0 && !form.model) {
+      setForm((f) => ({ ...f, model: availableModels[0].value }));
+    }
+  }, [availableModels]);
 
   const createAgent = async () => {
     if (!form.name.trim() || creating) return;
@@ -28,7 +35,7 @@ export function AgentStatusBar({ agents, connected, usingMockData }: AgentStatus
         body: JSON.stringify(form),
       });
       setShowForm(false);
-      setForm({ name: '', emoji: '🤖', model: 'sonnet', prompt: '' });
+      setForm({ name: '', emoji: '🤖', model: availableModels[0]?.value ?? 'sonnet', prompt: '' });
     } finally {
       setCreating(false);
     }
@@ -121,12 +128,9 @@ export function AgentStatusBar({ agents, connected, usingMockData }: AgentStatus
             title="Set model for all agents"
           >
             <option value="" disabled>All: model…</option>
-            <option value="sonnet">Sonnet</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="llama">Llama</option>
-            <option value="qwen">Qwen</option>
-            <option value="kimi">Kimi K</option>
-            <option value="mistral">Mistral</option>
+            {availableModels.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
           </select>
           <button
             onClick={() => setShowForm((v) => !v)}
@@ -167,11 +171,9 @@ export function AgentStatusBar({ agents, connected, usingMockData }: AgentStatus
             onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
             className="bg-slate-700 text-slate-100 px-2 py-1.5 text-sm rounded focus:outline-none focus:ring-1 focus:ring-blue-600"
           >
-            <option value="sonnet">Claude (sonnet)</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="llama">Llama 4</option>
-            <option value="qwen">Qwen 3</option>
-            <option value="kimi">Kimi K</option>
+            {availableModels.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
           </select>
           <input
             type="text"
