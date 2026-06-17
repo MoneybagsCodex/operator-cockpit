@@ -5,6 +5,7 @@ import { ChatThread } from '@/src/components/ChatThread';
 import { ApprovalQueue } from '@/src/components/ApprovalQueue';
 import { DecisionCarousel } from '@/src/components/DecisionCarousel';
 import { AgentStatusBar } from '@/src/components/AgentStatusBar';
+import { StatusSummary } from '@/src/components/StatusSummary';
 import { useLiveState } from '@/src/hooks/useLiveState';
 import { useState } from 'react';
 
@@ -52,7 +53,13 @@ export default function Dashboard() {
         />
 
         <div className="flex flex-1 overflow-hidden gap-4 p-4">
-          <div className="w-80 flex-shrink-0">
+          <div className="w-80 flex-shrink-0 flex flex-col gap-4">
+            <StatusSummary
+              projects={displayProjects}
+              agents={displayAgents}
+              chat={chat}
+              events={events}
+            />
             <ApprovalQueue approvals={approvals} agents={displayAgents} onDecide={decide} />
           </div>
 
