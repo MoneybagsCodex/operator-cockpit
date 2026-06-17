@@ -1,7 +1,8 @@
+'use client';
+
 import { ApprovalRequest, Agent } from '@/src/types';
 import { CheckCircle2, XCircle, AlertCircle, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
-import { Badge } from './Badge';
 
 interface ApprovalQueueProps {
   approvals: ApprovalRequest[];
@@ -11,141 +12,147 @@ interface ApprovalQueueProps {
 
 export function ApprovalQueue({ approvals, agents, onDecide }: ApprovalQueueProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [deciding, setDeciding] = useState<Set<string>>(new Set());
 
-  const getRiskColor = (risk: string) => {
-    switch (risk) {
-      case 'critical':
-        return 'bg-red-600';
-      case 'high':
-        return 'bg-orange-600';
-      case 'medium':
-        return 'bg-yellow-600';
-      case 'low':
-        return 'bg-green-600';
-      default:
-        return 'bg-slate-600';
+  // One pending approval per agent — most recent wins
+  const pendingByAgent = approvals
+    .filter((a) => a.status === 'pending')
+    .reduce<Record<string, ApprovalRequest>>((acc, a) => {
+      const existing = acc[a.agentId];
+      if (!existing || new Date(a.createdAt) > new Date(existing.createdAt)) {
+        acc[a.agentId] = a;
+      }
+      return acc;
+    }, {});
+  const pending = Object.values(pendingByAgent);
+
+  const decide = async (id: string, decision: 'approved' | 'rejected' | 'needs-revision') => {
+    if (deciding.has(id)) return;
+    setDeciding((prev) => new Set([...prev, id]));
+    try {
+      await onDecide?.(id, decision);
+      if (expandedId === id) setExpandedId(null);
+    } finally {
+      setDeciding((prev) => { const s = new Set(prev); s.delete(id); return s; });
     }
   };
 
-  const pendingApprovals = approvals.filter((a) => a.status === 'pending');
+  const approveAll = async () => {
+    await Promise.all(pending.map((a) => decide(a.id, 'approved')));
+  };
+
+  const getRiskColor = (risk: string) => {
+    switch (risk) {
+      case 'critical': return 'bg-red-600';
+      case 'high': return 'bg-orange-600';
+      case 'medium': return 'bg-yellow-600';
+      case 'low': return 'bg-green-600';
+      default: return 'bg-slate-600';
+    }
+  };
 
   return (
     <div className="w-80 bg-slate-800 rounded-lg p-4 flex flex-col overflow-hidden border border-slate-700">
-      <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">
-        Approval Queue ({pendingApprovals.length})
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+          Approvals {pending.length > 0 && `(${pending.length})`}
+        </h2>
+        {pending.length > 1 && (
+          <button
+            onClick={approveAll}
+            className="text-xs bg-green-600 hover:bg-green-700 text-white px-2.5 py-1 rounded transition-colors font-semibold"
+          >
+            Approve All
+          </button>
+        )}
+      </div>
 
       <div className="space-y-3 flex-1 overflow-y-auto">
-        {pendingApprovals.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-slate-500">
-            <p>All approvals handled</p>
+        {pending.length === 0 ? (
+          <div className="flex items-center justify-center h-full text-slate-500 text-sm">
+            All clear
           </div>
         ) : (
-          pendingApprovals.map((approval) => {
+          pending.map((approval) => {
             const agent = agents.find((a) => a.id === approval.agentId);
             const isExpanded = expandedId === approval.id;
+            const isDeciding = deciding.has(approval.id);
 
             return (
               <div
                 key={approval.id}
                 className="bg-slate-700 rounded-lg border border-slate-600 overflow-hidden"
               >
-                <button
-                  onClick={() =>
-                    setExpandedId(isExpanded ? null : approval.id)
-                  }
-                  className="w-full text-left p-3 hover:bg-slate-600/50 transition-colors"
-                >
-                  <div className="flex items-start gap-3 justify-between">
-                    <div className="flex items-start gap-3 flex-1">
-                      <div
-                        className={`w-3 h-3 rounded-full flex-shrink-0 mt-1 ${getRiskColor(approval.riskLevel)}`}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-sm text-slate-100 line-clamp-2">
-                          {approval.action}
-                        </h3>
-                        {agent && (
-                          <p className="text-xs text-slate-400 mt-1">{agent.name}</p>
-                        )}
-                      </div>
+                {/* Collapsed header — always visible */}
+                <div className="p-3">
+                  <div className="flex items-start gap-2 mb-2.5">
+                    <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1 ${getRiskColor(approval.riskLevel)}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-slate-100 font-medium leading-snug line-clamp-2">
+                        {approval.action}
+                      </p>
+                      {agent && <p className="text-xs text-slate-400 mt-0.5">{agent.name}</p>}
                     </div>
-                    <ChevronDown
-                      className={`w-4 h-4 flex-shrink-0 text-slate-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                    />
                   </div>
-                </button>
 
+                  {/* Action buttons always visible */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => decide(approval.id, 'approved')}
+                      disabled={isDeciding}
+                      className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white px-2 py-1.5 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      {approval.approveButton || 'Approve'}
+                    </button>
+                    <button
+                      onClick={() => decide(approval.id, 'rejected')}
+                      disabled={isDeciding}
+                      className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white px-2 py-1.5 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1"
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      {approval.rejectButton || 'Reject'}
+                    </button>
+                    <button
+                      onClick={() => setExpandedId(isExpanded ? null : approval.id)}
+                      className="text-slate-400 hover:text-slate-200 p-1.5 rounded hover:bg-slate-600 transition-colors"
+                      title="Show details"
+                    >
+                      <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expanded details */}
                 {isExpanded && (
-                  <div className="border-t border-slate-600 p-3 space-y-3 bg-slate-700/50">
+                  <div className="border-t border-slate-600 p-3 space-y-3 bg-slate-700/50 text-sm">
                     <div>
-                      <h4 className="text-xs font-semibold text-slate-300 uppercase mb-2">
-                        Rationale
-                      </h4>
-                      <p className="text-sm text-slate-300">{approval.rationale}</p>
-                    </div>
-
-                    <div>
-                      <h4 className="text-xs font-semibold text-slate-300 uppercase mb-2">
-                        Risk Level
-                      </h4>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs font-semibold px-2 py-1 rounded ${getRiskColor(approval.riskLevel)} text-white`}>
-                          {approval.riskLevel.toUpperCase()}
-                        </span>
-                      </div>
+                      <p className="text-xs font-semibold text-slate-400 uppercase mb-1">Rationale</p>
+                      <p className="text-slate-300">{approval.rationale}</p>
                     </div>
 
                     {approval.affectedSystems.length > 0 && (
                       <div>
-                        <h4 className="text-xs font-semibold text-slate-300 uppercase mb-2">
-                          Affected Systems
-                        </h4>
-                        <div className="space-y-1">
-                          {approval.affectedSystems.map((system, i) => (
-                            <p key={i} className="text-xs text-slate-400">
-                              • {system}
-                            </p>
-                          ))}
-                        </div>
+                        <p className="text-xs font-semibold text-slate-400 uppercase mb-1">Affected</p>
+                        <p className="text-slate-400 text-xs">{approval.affectedSystems.join(', ')}</p>
                       </div>
                     )}
 
                     {approval.expectedOutcome && (
                       <div>
-                        <h4 className="text-xs font-semibold text-slate-300 uppercase mb-2">
-                          Expected Outcome
-                        </h4>
-                        <p className="text-sm text-slate-300">
-                          {approval.expectedOutcome}
-                        </p>
+                        <p className="text-xs font-semibold text-slate-400 uppercase mb-1">Outcome</p>
+                        <p className="text-slate-300">{approval.expectedOutcome}</p>
                       </div>
                     )}
 
-                    <div className="flex gap-2 pt-2">
-                      <button
-                        onClick={() => onDecide?.(approval.id, 'approved')}
-                        className="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-2"
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>{approval.approveButton || 'Approve'}</span>
-                      </button>
-                      <button
-                        onClick={() => onDecide?.(approval.id, 'rejected')}
-                        className="flex-1 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-2"
-                      >
-                        <XCircle className="w-4 h-4" />
-                        <span>{approval.rejectButton || 'Reject'}</span>
-                      </button>
-                    </div>
-
                     {approval.requestChangesButton && (
                       <button
-                        onClick={() => onDecide?.(approval.id, 'needs-revision')}
-                        className="w-full bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-2"
+                        onClick={() => decide(approval.id, 'needs-revision')}
+                        disabled={isDeciding}
+                        className="w-full bg-yellow-600 hover:bg-yellow-700 disabled:opacity-40 text-white px-3 py-1.5 rounded text-xs font-semibold transition-colors flex items-center justify-center gap-1"
                       >
-                        <AlertCircle className="w-4 h-4" />
-                        <span>{approval.requestChangesButton}</span>
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        {approval.requestChangesButton}
                       </button>
                     )}
                   </div>
