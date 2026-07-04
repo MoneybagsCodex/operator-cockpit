@@ -91,7 +91,9 @@ function sessionCwd(filePath: string): string | undefined {
 // and tag the session so the approval-bridge hook activates + attributes correctly.
 function ptyEnv(extra?: Record<string, string>): NodeJS.ProcessEnv {
   const env = { ...process.env, ...(extra ?? {}) };
-  const pathExtra = [CLAUDE_BIN_DIR, 'C:\\Windows\\System32'];
+  const pathExtra = process.platform === 'win32'
+    ? [CLAUDE_BIN_DIR, 'C:\\Windows\\System32']
+    : [CLAUDE_BIN_DIR];
   env.PATH = [...pathExtra, process.env.PATH ?? ''].filter(Boolean).join(path.delimiter);
   // Route this terminal's risky actions through the cockpit approval gate.
   env.COCKPIT_APPROVAL_BRIDGE = '1';
