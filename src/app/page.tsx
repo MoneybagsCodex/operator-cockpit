@@ -154,6 +154,7 @@ export default function Dashboard() {
   }, [terminalPanels, hydrated]);
 
   // On load, auto-open recent active conversations (last 6h) as LIVE terminals —
+  // DISABLED: old sessions may hang when resuming, users should manually launch fresh terminals
   // ONLY when nothing was restored from localStorage (a genuine cold start).
   const autoOpenedRef = useRef(false);
   useEffect(() => {
@@ -161,26 +162,27 @@ export default function Dashboard() {
     if (autoOpenedRef.current) return;
     autoOpenedRef.current = true;
     if (restoredRef.current) return;  // restored panels already cover the open set
-    (async () => {
-      try {
-        const res = await fetch('/api/sessions');
-        const data = await res.json();
-        const sessions: Array<{ id: string; projectLabel: string; lastModified: string; preview: string }> =
-          data.sessions ?? [];
-        const cutoff = Date.now() - 6 * 60 * 60 * 1000;
-        const recent = sessions
-          .filter((s) => new Date(s.lastModified).getTime() > cutoff)
-          .slice(0, MAX_SESSIONS);
-        for (const s of recent) {
-          const label = s.preview?.trim()
-            ? `${s.preview.slice(0, 38)}${s.preview.length > 38 ? '…' : ''}`
-            : `${s.projectLabel} ${s.id.slice(0, 6)}`;
-          openTerminal({ mode: 'resume', id: s.id, title: label });
-        }
-      } catch {
-        /* no sessions endpoint or none recent — fine */
-      }
-    })();
+    // Auto-open disabled: old sessions may hang on resume; users should manually launch
+    // (async () => {
+    //   try {
+    //     const res = await fetch('/api/sessions');
+    //     const data = await res.json();
+    //     const sessions: Array<{ id: string; projectLabel: string; lastModified: string; preview: string }> =
+    //       data.sessions ?? [];
+    //     const cutoff = Date.now() - 6 * 60 * 60 * 1000;
+    //     const recent = sessions
+    //       .filter((s) => new Date(s.lastModified).getTime() > cutoff)
+    //       .slice(0, MAX_SESSIONS);
+    //     for (const s of recent) {
+    //       const label = s.preview?.trim()
+    //         ? `${s.preview.slice(0, 38)}${s.preview.length > 38 ? '…' : ''}`
+    //         : `${s.projectLabel} ${s.id.slice(0, 6)}`;
+    //       openTerminal({ mode: 'resume', id: s.id, title: label });
+    //     }
+    //   } catch {
+    //     /* no sessions endpoint or none recent — fine */
+    //   }
+    // })();
   }, [openTerminal, hydrated]);
 
   const totalPanels = terminalPanels.length;
