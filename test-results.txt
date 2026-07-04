@@ -1,0 +1,145 @@
+
+Running 23 tests using 5 workers
+
+  ✘   5 [chromium] › tests/dashboard.spec.ts:32:7 › Operator Cockpit Dashboard › should display past sessions section (8.3s)
+  ✓   4 [chromium] › tests/dashboard.spec.ts:10:7 › Operator Cockpit Dashboard › should load the dashboard page (8.7s)
+  ✘   3 [chromium] › tests/dashboard.spec.ts:25:7 › Operator Cockpit Dashboard › should display JIRA section (9.1s)
+  ✓   2 [chromium] › tests/dashboard.spec.ts:20:7 › Operator Cockpit Dashboard › should display approval queue section (10.0s)
+  ✘   1 [chromium] › tests/dashboard.spec.ts:15:7 › Operator Cockpit Dashboard › should display the header with title (14.7s)
+  ✓   6 [chromium] › tests/dashboard.spec.ts:46:7 › Operator Cockpit Dashboard › should have main content area with flex layout (11.7s)
+  ✓   8 [chromium] › tests/dashboard.spec.ts:38:7 › Operator Cockpit Dashboard › should render terminal panels in a grid (9.2s)
+  ✓   7 [chromium] › tests/dashboard.spec.ts:58:7 › Operator Cockpit Dashboard › should have interactive elements (buttons) (10.8s)
+  ✓   9 [chromium] › tests/dashboard.spec.ts:53:7 › Operator Cockpit Dashboard › should render with dark theme colors (slate-900) (9.2s)
+  ✓  14 [chromium] › tests/dashboard.spec.ts:95:7 › Operator Cockpit Dashboard › should have proper focus management (12.7s)
+  ✓  10 [chromium] › tests/dashboard.spec.ts:71:7 › Operator Cockpit Dashboard › should render approval items if present (13.1s)
+  ✓  11 [chromium] › tests/dashboard.spec.ts:78:7 › Operator Cockpit Dashboard › should have scrollable areas (13.4s)
+  ✓  12 [chromium] › tests/dashboard.spec.ts:84:7 › Operator Cockpit Dashboard › should respond to viewport changes (13.2s)
+  ✓  13 [chromium] › tests/dashboard.spec.ts:64:7 › Operator Cockpit Dashboard › should have sidebar with width constraint (12.3s)
+  ✓  15 [chromium] › tests/dashboard.spec.ts:102:7 › Operator Cockpit Dashboard › should render text content without errors (7.1s)
+  ✓  17 [chromium] › tests/dashboard.spec.ts:125:7 › Operator Cockpit Dashboard › should have proper HTML structure (7.7s)
+  ✓  18 [chromium] › tests/dashboard.spec.ts:134:7 › Operator Cockpit Dashboard › should load images without errors (7.9s)
+  ✓  19 [chromium] › tests/dashboard.spec.ts:141:7 › Operator Cockpit Dashboard › should have accessible color contrast (7.8s)
+  ✘  16 [chromium] › tests/dashboard.spec.ts:108:7 › Operator Cockpit Dashboard › should not have any console errors during load (13.0s)
+  ✓  20 [chromium] › tests/dashboard.spec.ts:150:7 › Operator Cockpit Interactions › should allow button clicks without errors (6.3s)
+  ✓  23 [chromium] › tests/dashboard.spec.ts:186:7 › Operator Cockpit Interactions › should maintain responsive layout on larger viewport (5.7s)
+  ✓  22 [chromium] › tests/dashboard.spec.ts:177:7 › Operator Cockpit Interactions › should maintain responsive layout on smaller viewport (5.9s)
+  ✓  21 [chromium] › tests/dashboard.spec.ts:165:7 › Operator Cockpit Interactions › should handle rapid navigation (9.5s)
+
+
+  1) [chromium] › tests/dashboard.spec.ts:15:7 › Operator Cockpit Dashboard › should display the header with title 
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: locator('h1')
+    Expected substring: "AI Operator Cockpit"
+    Received string:    "Operator Cockpit"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toContainText" with timeout 5000ms
+      - waiting for locator('h1')
+        13 × locator resolved to <h1 class="text-xl font-bold text-slate-100">Operator Cockpit</h1>
+           - unexpected value "Operator Cockpit"
+
+
+      15 |   test('should display the header with title', async ({ page }) => {
+      16 |     const header = page.locator('h1');
+    > 17 |     await expect(header).toContainText('AI Operator Cockpit');
+         |                          ^
+      18 |   });
+      19 |
+      20 |   test('should display approval queue section', async ({ page }) => {
+        at /Users/joshuaminton/operator-cockpit/tests/dashboard.spec.ts:17:26
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/dashboard-Operator-Cockpit-e2f85-splay-the-header-with-title-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/dashboard-Operator-Cockpit-e2f85-splay-the-header-with-title-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/dashboard-Operator-Cockpit-e2f85-splay-the-header-with-title-chromium/error-context.md
+
+  2) [chromium] › tests/dashboard.spec.ts:25:7 › Operator Cockpit Dashboard › should display JIRA section 
+
+    Error: expect(received).toBeTruthy()
+
+    Received: false
+
+      27 |     // JIRA section may or may not be visible depending on setup
+      28 |     const exists = await jiraSection.count() > 0;
+    > 29 |     expect(exists).toBeTruthy();
+         |                    ^
+      30 |   });
+      31 |
+      32 |   test('should display past sessions section', async ({ page }) => {
+        at /Users/joshuaminton/operator-cockpit/tests/dashboard.spec.ts:29:20
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/dashboard-Operator-Cockpit-399e8-should-display-JIRA-section-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/dashboard-Operator-Cockpit-399e8-should-display-JIRA-section-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/dashboard-Operator-Cockpit-399e8-should-display-JIRA-section-chromium/error-context.md
+
+  3) [chromium] › tests/dashboard.spec.ts:32:7 › Operator Cockpit Dashboard › should display past sessions section 
+
+    Error: expect(received).toBeTruthy()
+
+    Received: false
+
+      33 |     const sessionsSection = page.locator('h2').filter({ hasText: /Sessions|Past/i });
+      34 |     const exists = await sessionsSection.count() > 0;
+    > 35 |     expect(exists).toBeTruthy();
+         |                    ^
+      36 |   });
+      37 |
+      38 |   test('should render terminal panels in a grid', async ({ page }) => {
+        at /Users/joshuaminton/operator-cockpit/tests/dashboard.spec.ts:35:20
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/dashboard-Operator-Cockpit-6a818-splay-past-sessions-section-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/dashboard-Operator-Cockpit-6a818-splay-past-sessions-section-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/dashboard-Operator-Cockpit-6a818-splay-past-sessions-section-chromium/error-context.md
+
+  4) [chromium] › tests/dashboard.spec.ts:108:7 › Operator Cockpit Dashboard › should not have any console errors during load 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: 13
+
+      120 |     // Filter out expected third-party errors
+      121 |     const criticalErrors = errors.filter(e => !e.includes('third-party') && !e.includes('extension'));
+    > 122 |     expect(criticalErrors.length).toBe(0);
+          |                                   ^
+      123 |   });
+      124 |
+      125 |   test('should have proper HTML structure', async ({ page }) => {
+        at /Users/joshuaminton/operator-cockpit/tests/dashboard.spec.ts:122:35
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/dashboard-Operator-Cockpit-74c49--console-errors-during-load-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/dashboard-Operator-Cockpit-74c49--console-errors-during-load-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/dashboard-Operator-Cockpit-74c49--console-errors-during-load-chromium/error-context.md
+
+  4 failed
+    [chromium] › tests/dashboard.spec.ts:15:7 › Operator Cockpit Dashboard › should display the header with title 
+    [chromium] › tests/dashboard.spec.ts:25:7 › Operator Cockpit Dashboard › should display JIRA section 
+    [chromium] › tests/dashboard.spec.ts:32:7 › Operator Cockpit Dashboard › should display past sessions section 
+    [chromium] › tests/dashboard.spec.ts:108:7 › Operator Cockpit Dashboard › should not have any console errors during load 
+  19 passed (53.2s)

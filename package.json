@@ -1,0 +1,42 @@
+{
+  "name": "ai-operator-cockpit",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "lint": "next lint",
+    "bridge": "npx tsx src/bridge/server.ts",
+    "predev:all": "node src/scripts/free-ports.js 3001 3002",
+    "dev:all": "concurrently -n dashboard,bridge -c cyan,yellow \"npm run dev\" \"npm run bridge\""
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.2",
+    "@radix-ui/react-dialog": "^1.1.1",
+    "@radix-ui/react-scroll-area": "^1.0.5",
+    "@radix-ui/react-tabs": "^1.0.4",
+    "@types/ws": "^8.18.1",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "lucide-react": "^0.263.1",
+    "next": "^14.0.0",
+    "node-pty": "^1.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-markdown": "^10.1.0",
+    "tailwindcss": "^3.3.0",
+    "typescript": "^5.0.0",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^20.19.43",
+    "@types/react": "^18.2.0",
+    "autoprefixer": "^10.4.14",
+    "concurrently": "^9.2.1",
+    "postcss": "^8.4.24",
+    "tsx": "^4.22.4",
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,184 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Boot splash animations */
+@keyframes bootLogoIn {
+  0%   { opacity: 0; transform: scale(0.55) translateY(6px); }
+  60%  { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes bootGlow {
+  0%, 100% { filter: drop-shadow(0 0 0px rgba(47, 233, 219, 0)); }
+  50%      { filter: drop-shadow(0 0 24px rgba(47, 233, 219, 0.55)); }
+}
+@keyframes bootNameIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Animated "…" for the agent-initializing overlay */
+.loading-dots::after { content: ''; animation: loadingDots 1.4s steps(1, end) infinite; }
+@keyframes loadingDots {
+  0%   { content: ''; }
+  25%  { content: '.'; }
+  50%  { content: '..'; }
+  75%  { content: '...'; }
+  100% { content: ''; }
+}
+
+/* ── Color schemes ─────────────────────────────────────────────
+   Every `slate-N` utility resolves to rgb(var(--c-N)); accents/background are
+   layered on top via the overrides below. Selecting a scheme (data-scheme on
+   <html>) swaps the whole token set atomically. Default = daylight.
+
+   Per scheme:
+     --scheme-bg     page background (may be a gradient)
+     --accent        brand accent for fills/buttons/icons
+     --accent-text   SAFE text color for accent-styled text (never turquoise/
+                     orange on light backgrounds — falls back to headline)
+     --on-accent     text/icon color placed on an accent fill
+     --c-50..950     slate ramp (inverted for light schemes so bg-slate-900 reads
+                     as the light page bg and text-slate-100 as dark body text)
+*/
+
+/* Default (no/unknown data-scheme) = Mist. Kept FIRST and standalone so every
+   [data-scheme="…"] rule below (equal specificity, later in source) overrides
+   it when a scheme is selected. Do NOT merge :root into a scheme rule — that
+   makes the default win over earlier schemes and breaks switching. */
+:root {
+  --scheme-bg: #CADAFF;
+  --accent: #1F5EFF; --accent-text: #001065; --on-accent: #FFFFFF;
+  --c-50: 0 0 0;        --c-100: 0 16 101;    --c-200: 0 16 101;
+  --c-300: 0 16 101;    --c-400: 80 95 130;   --c-500: 95 110 150;
+  --c-600: 135 168 255; --c-700: 135 168 255; --c-800: 255 255 255;
+  --c-900: 202 218 255; --c-950: 255 255 255;
+}
+
+/* Daylight — light. White canvas, dark-purple headlines, blue accent. */
+[data-scheme="daylight"] {
+  --scheme-bg: #FFFFFF;
+  --accent: #1F5EFF; --accent-text: #001065; --on-accent: #FFFFFF;
+  --c-50: 0 0 0;        --c-100: 0 16 101;    --c-200: 0 16 101;
+  --c-300: 0 16 101;    --c-400: 90 100 130;  --c-500: 110 122 150;
+  --c-600: 202 218 255; --c-700: 202 218 255; --c-800: 255 255 255;
+  --c-900: 255 255 255; --c-950: 255 255 255;
+}
+
+/* Dark — true neutral dark mode (charcoal-navy), light text, turquoise accent. */
+[data-scheme="dark"] {
+  --scheme-bg: #0B0F19;
+  --accent: #2FE9DB; --accent-text: #2FE9DB; --on-accent: #001065;
+  --c-50: 255 255 255; --c-100: 241 245 249; --c-200: 226 232 240;
+  --c-300: 200 208 222; --c-400: 148 160 180; --c-500: 110 122 145;
+  --c-600: 52 62 82;   --c-700: 38 46 64;    --c-800: 20 26 38;
+  --c-900: 11 15 25;   --c-950: 5 8 16;
+}
+
+/* Midnight — dark purple canvas, white text, turquoise accent. */
+[data-scheme="midnight"] {
+  --scheme-bg: #001065;
+  --accent: #2FE9DB; --accent-text: #2FE9DB; --on-accent: #001065;
+  --c-50: 255 255 255; --c-100: 255 255 255; --c-200: 245 245 255;
+  --c-300: 225 228 245; --c-400: 180 178 225; --c-500: 150 148 200;
+  --c-600: 98 2 255;   --c-700: 98 2 255;    --c-800: 0 16 101;
+  --c-900: 0 16 101;   --c-950: 0 8 45;
+}
+
+/* Nebula — dark-purple→purple gradient hero, white text, turquoise accent. */
+[data-scheme="nebula"] {
+  --scheme-bg: linear-gradient(135deg, #001065, #6202FF);
+  --accent: #2FE9DB; --accent-text: #2FE9DB; --on-accent: #001065;
+  --c-50: 255 255 255; --c-100: 255 255 255; --c-200: 245 245 255;
+  --c-300: 225 228 245; --c-400: 185 180 230; --c-500: 155 150 205;
+  --c-600: 98 2 255;   --c-700: 98 2 255;    --c-800: 0 16 101;
+  --c-900: 0 16 101;   --c-950: 0 8 45;
+}
+
+/* Haze — soft light-purple sections, dark-purple text, purple accent. */
+[data-scheme="haze"] {
+  --scheme-bg: #F3EBFF;
+  --accent: #6202FF; --accent-text: #001065; --on-accent: #FFFFFF;
+  --c-50: 0 0 0;        --c-100: 0 16 101;    --c-200: 0 16 101;
+  --c-300: 0 16 101;    --c-400: 90 100 130;  --c-500: 110 122 150;
+  --c-600: 202 218 255; --c-700: 202 218 255; --c-800: 255 255 255;
+  --c-900: 243 235 255; --c-950: 255 255 255;
+}
+
+/* Linen — warm neutral tan, dark-purple text, orange accent. */
+[data-scheme="linen"] {
+  --scheme-bg: #F8F6F3;
+  --accent: #FB8F2C; --accent-text: #001065; --on-accent: #001065;
+  --c-50: 0 0 0;        --c-100: 0 16 101;    --c-200: 0 16 101;
+  --c-300: 0 16 101;    --c-400: 90 100 130;  --c-500: 110 122 150;
+  --c-600: 202 218 255; --c-700: 202 218 255; --c-800: 255 255 255;
+  --c-900: 248 246 243; --c-950: 255 255 255;
+}
+
+/* Mist — cool lightest-blue background, dark-purple text, blue accent. DEFAULT (see :root). */
+[data-scheme="mist"] {
+  --scheme-bg: #CADAFF;
+  --accent: #1F5EFF; --accent-text: #001065; --on-accent: #FFFFFF;
+  --c-50: 0 0 0;        --c-100: 0 16 101;    --c-200: 0 16 101;
+  --c-300: 0 16 101;    --c-400: 80 95 130;   --c-500: 95 110 150;
+  --c-600: 135 168 255; --c-700: 135 168 255; --c-800: 255 255 255;
+  --c-900: 202 218 255; --c-950: 255 255 255;
+}
+
+/* Ember — warm light-orange highlight, dark-purple text, orange accent. */
+[data-scheme="ember"] {
+  --scheme-bg: #FFE1C5;
+  --accent: #FB8F2C; --accent-text: #001065; --on-accent: #001065;
+  --c-50: 0 0 0;        --c-100: 0 16 101;    --c-200: 0 16 101;
+  --c-300: 0 16 101;    --c-400: 90 100 130;  --c-500: 110 122 150;
+  --c-600: 202 218 255; --c-700: 202 218 255; --c-800: 255 255 255;
+  --c-900: 255 225 197; --c-950: 255 255 255;
+}
+
+@layer base {
+  html { scrollbar-width: thin; scrollbar-color: rgb(var(--c-600)) rgb(var(--c-800)); }
+  html::-webkit-scrollbar { width: 8px; height: 8px; }
+  html::-webkit-scrollbar-track { background: rgb(var(--c-800)); }
+  html::-webkit-scrollbar-thumb { background: rgb(var(--c-600)); border-radius: 4px; }
+  html::-webkit-scrollbar-thumb:hover { background: rgb(var(--c-500)); }
+
+  body {
+    background: var(--scheme-bg);
+    color: rgb(var(--c-100));
+  }
+}
+
+/* ── Scheme accent + background mapping ───────────────────────────────────────
+   Slate surfaces/text/borders already follow the ramp above. Here we point the
+   page background at --scheme-bg (so gradients work) and remap the blue/cyan
+   accent utilities to the scheme accent — keeping accent TEXT brand-safe. */
+[data-scheme] .bg-slate-900 { background: var(--scheme-bg); }
+
+/* accent fills */
+[data-scheme] .bg-blue-600, [data-scheme] .bg-blue-500,
+[data-scheme] .bg-cyan-600, [data-scheme] .bg-cyan-700, [data-scheme] .bg-cyan-400,
+[data-scheme] .bg-cyan-700\/40, [data-scheme] .bg-cyan-700\/50,
+[data-scheme] .hover\:bg-blue-700:hover, [data-scheme] .hover\:bg-cyan-600:hover {
+  background-color: var(--accent);
+}
+
+/* accent text — brand-safe (dark on light schemes, turquoise on dark schemes) */
+[data-scheme] .text-blue-400, [data-scheme] .text-blue-300,
+[data-scheme] .text-cyan-400, [data-scheme] .text-cyan-300,
+[data-scheme] .text-cyan-200, [data-scheme] .text-cyan-100,
+[data-scheme] .text-cyan-400\/70 {
+  color: var(--accent-text);
+}
+
+/* text/icons sitting on an accent fill */
+[data-scheme] .bg-blue-600.text-white, [data-scheme] .bg-cyan-600.text-white {
+  color: var(--on-accent);
+}
+
+/* accent borders + focus rings */
+[data-scheme] .border-blue-600, [data-scheme] .border-blue-500,
+[data-scheme] .border-cyan-700, [data-scheme] .border-cyan-700\/50,
+[data-scheme] .hover\:border-blue-500:hover, [data-scheme] .hover\:border-cyan-600:hover {
+  border-color: var(--accent);
+}
+[data-scheme] .focus\:ring-blue-600:focus { --tw-ring-color: var(--accent); }
