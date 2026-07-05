@@ -111,14 +111,21 @@ export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTermi
     if (!form.name.trim() || creating) return;
     setCreating(true);
     try {
-      await fetch('/api/agents', {
+      const res = await fetch('/api/agents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });
-      setForm({ name: '', emoji: '🤖', model: 'sonnet', prompt: '', workDir: '' });
-      setShowForm(false);
-      fetchConfigs();
+      const data = await res.json();
+      if (data.config) {
+        const agentId = data.config.id;
+        const agentName = data.config.name;
+        setForm({ name: '', emoji: '🤖', model: 'sonnet', prompt: '', workDir: '' });
+        setShowForm(false);
+        fetchConfigs();
+        // Launch the agent terminal immediately after creation
+        setTimeout(() => launch(agentId, agentName), 300);
+      }
     } finally {
       setCreating(false);
     }
