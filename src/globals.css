@@ -135,6 +135,16 @@
   --c-900: 255 225 197; --c-950: 255 255 255;
 }
 
+/* Crimson — dark wine-red background, light text, red accent. Easy on eyes for evening. */
+[data-scheme="crimson"] {
+  --scheme-bg: #1a0f0f;
+  --accent: #DC2626; --accent-text: #FCA5A5; --on-accent: #FFFFFF;
+  --c-50: 255 255 255; --c-100: 241 245 249; --c-200: 226 232 240;
+  --c-300: 200 208 222; --c-400: 148 160 180; --c-500: 110 122 145;
+  --c-600: 52 62 82;   --c-700: 38 46 64;    --c-800: 20 26 38;
+  --c-900: 16 12 12;   --c-950: 10 7 7;
+}
+
 @layer base {
   html { scrollbar-width: thin; scrollbar-color: rgb(var(--c-600)) rgb(var(--c-800)); }
   html::-webkit-scrollbar { width: 8px; height: 8px; }

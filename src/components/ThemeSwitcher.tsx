@@ -13,6 +13,7 @@ const SCHEMES = [
   { id: 'linen',    name: 'Linen',    swatch: '#FB8F2C', dark: false },
   { id: 'mist',     name: 'Mist',     swatch: '#1F5EFF', dark: false },
   { id: 'ember',    name: 'Ember',    swatch: '#FB8F2C', dark: false },
+  { id: 'crimson',  name: 'Crimson',  swatch: '#DC2626', dark: true },
 ] as const;
 
 type SchemeId = (typeof SCHEMES)[number]['id'];
