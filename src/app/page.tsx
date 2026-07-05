@@ -8,6 +8,7 @@ import { SprintTickets } from '@/src/components/SprintTickets';
 import { SessionBrowser } from '@/src/components/SessionBrowser';
 import { TerminalPanel } from '@/src/components/TerminalPanel';
 import { BootSplash } from '@/src/components/BootSplash';
+import { SyncCheckBanner } from '@/src/components/SyncCheckBanner';
 import { useLiveState } from '@/src/hooks/useLiveState';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 
@@ -217,6 +218,7 @@ export default function Dashboard() {
         <div className="flex flex-1 overflow-hidden gap-4 p-4 min-h-0">
           {/* Sidebar */}
           <div className="w-80 flex-shrink-0 min-h-0 flex flex-col gap-3 overflow-y-auto">
+            <SyncCheckBanner />
             {capNotice && (
               <div className="bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs rounded-lg px-3 py-2">
                 Max {MAX_SESSIONS} sessions open. Close one (×) before opening another.
