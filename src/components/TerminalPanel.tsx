@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { X, TerminalSquare, Pencil, Check, Maximize2, Minimize2 } from 'lucide-react';
+import { X, TerminalSquare, Pencil, Check, Maximize2, Minimize2, RefreshCw, Loader2 } from 'lucide-react';
 
 interface TerminalPanelProps {
   title: string;
@@ -36,6 +36,7 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
   const [reconnecting, setReconnecting] = useState(false); // true while retrying a dropped connection
   const [ended, setEnded] = useState(false); // the underlying claude session is gone (won't reconnect)
   const [stalled, setStalled] = useState(false); // repeated flaps — stopped retrying, panel kept
+  const [syncing, setSyncing] = useState(false); // running sync-check
   const stableTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null); // resets backoff once link is stable
   const readyRef = useRef(false);     // latest `ready` for use inside the WS closure
   const focusedRef = useRef(false);   // is the user currently in this terminal
@@ -120,6 +121,25 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
     const next = draft.trim();
     if (next && onRename) onRename(next);
     setEditing(false);
+  };
+
+  const handleSync = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const res = await fetch('/api/sync-check');
+      await res.json();
+      // Show success feedback in terminal
+      if (termRef.current) {
+        termRef.current.write('\x1b[92m✓ Sync check complete\x1b[0m\r\n');
+      }
+    } catch (err) {
+      if (termRef.current) {
+        termRef.current.write('\x1b[91m✗ Sync check failed\x1b[0m\r\n');
+      }
+    } finally {
+      setSyncing(false);
+    }
   };
 
   useEffect(() => {
@@ -330,6 +350,14 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
               <Check className="w-4 h-4" />
             </button>
           )}
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-50"
+            title="Run sync-check for knowledge base coherence"
+          >
+            {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          </button>
           <button
             onClick={onClose}
             className="text-slate-500 hover:text-slate-300 transition-colors"

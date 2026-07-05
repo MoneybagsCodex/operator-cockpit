@@ -1,7 +1,7 @@
 'use client';
 
 import { Agent } from '@/src/types';
-import { Circle, Plus, X, Play, ShieldCheck, Loader2, Folder } from 'lucide-react';
+import { Circle, Plus, X, Play, ShieldCheck, Loader2, Folder, RefreshCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { ThemeSwitcher } from './ThemeSwitcher';
 
@@ -48,6 +48,7 @@ export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTermi
   const [projects, setProjects] = useState<ProjectDir[]>([]);
   const [launching, setLaunching] = useState<string | null>(null);
   const [trusting, setTrusting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [jiraTickets, setJiraTickets] = useState<Array<{ key: string; summary: string; url: string }>>([]);
 
   // Load Jira tickets the first time the New Agent form opens (for the linker dropdown)
@@ -73,6 +74,20 @@ export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTermi
     onTrustAll();
     // No completion signal from the PTYs; show progress briefly while they accept.
     setTimeout(() => setTrusting(false), 2500);
+  };
+
+  const handleSync = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const res = await fetch('/api/sync-check');
+      await res.json();
+      // Trigger browser refresh to reload the sync-check banner
+      window.location.reload();
+    } catch (err) {
+      console.error('Sync check failed:', err);
+      setSyncing(false);
+    }
   };
 
   useEffect(() => {
@@ -207,6 +222,15 @@ export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTermi
               {trusting ? 'Trusting…' : 'Trust all'}
             </button>
           )}
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            title="Run sync-check to verify knowledge base coherence"
+            className="flex items-center gap-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded transition-colors disabled:opacity-70"
+          >
+            {syncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+            {syncing ? 'Syncing…' : 'Sync'}
+          </button>
           <ThemeSwitcher />
           <button
             onClick={() => setShowForm((v) => !v)}
