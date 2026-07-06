@@ -35,11 +35,17 @@ function extractAgentName(wsUrl: string): string {
     const url = new URL(wsUrl);
     // Try agent param first (launch mode)
     const agent = url.searchParams.get('agent');
-    if (agent) return agent;
+    if (agent) {
+      console.log('[Color] Using agent:', agent);
+      return agent;
+    }
     // Fall back to label (which is the display name)
     const label = url.searchParams.get('label');
-    return label ? decodeURIComponent(label) : 'session';
-  } catch {
+    const decoded = label ? decodeURIComponent(label) : 'session';
+    console.log('[Color] Using label:', decoded);
+    return decoded;
+  } catch (e) {
+    console.log('[Color] Extract failed:', e);
     return 'session';
   }
 }
@@ -359,9 +365,8 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
         maximized ? 'fixed inset-0 z-50 rounded-none' : 'rounded-lg'
       } ${needsAttention ? 'agent-attention' : ''}`}
       style={{
-        boxShadow: linkColor
-          ? `inset 4px 0 0 ${linkColor}`
-          : `inset 0 3px 0 ${agentColor(extractAgentName(wsUrl))}`,
+        borderTop: `3px solid ${agentColor(extractAgentName(wsUrl))}`,
+        boxShadow: linkColor ? `inset 4px 0 0 ${linkColor}` : 'none',
       }}
     >
       {/* Header */}
