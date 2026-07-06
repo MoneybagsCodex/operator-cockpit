@@ -29,6 +29,21 @@ function extractSessionId(wsUrl: string): string {
   }
 }
 
+// Extract agent/project name from WebSocket URL for color coding
+function extractAgentName(wsUrl: string): string {
+  try {
+    const url = new URL(wsUrl);
+    // Try agent param first (launch mode)
+    const agent = url.searchParams.get('agent');
+    if (agent) return agent;
+    // Fall back to label (which is the display name)
+    const label = url.searchParams.get('label');
+    return label ? decodeURIComponent(label) : 'session';
+  } catch {
+    return 'session';
+  }
+}
+
 // Generate a consistent color based on agent name
 function agentColor(agentName: string): string {
   const colors = [
@@ -346,7 +361,7 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
       style={{
         boxShadow: linkColor
           ? `inset 4px 0 0 ${linkColor}`
-          : `inset 0 3px 0 ${agentColor(title)}`,
+          : `inset 0 3px 0 ${agentColor(extractAgentName(wsUrl))}`,
       }}
     >
       {/* Header */}
