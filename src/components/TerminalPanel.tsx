@@ -366,11 +366,9 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
             ? <span className="text-[10px] uppercase tracking-wide text-amber-400 flex-shrink-0 animate-pulse">reconnecting…</span>
             : <span className="text-[10px] uppercase tracking-wide text-cyan-400/70 flex-shrink-0">live</span>}
         </div>
-        {/* Session metrics */}
-        <div className="flex-shrink-0">
+        <div className="flex items-center gap-2.5 flex-shrink-0">
+          {/* Session metrics */}
           <SessionMetrics sessionId={extractSessionId(wsUrl)} />
-        </div>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
           {onRename && !editing && (
             <button onClick={startRename} className="text-slate-500 hover:text-slate-300 transition-colors" title="Rename">
               <Pencil className="w-3.5 h-3.5" />
