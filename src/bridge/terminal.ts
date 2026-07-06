@@ -30,7 +30,7 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { isAutoApprovedForAgent, readApprovals } from '@/src/lib/state';
+import { isAutoApprovedForAgent, readApprovals } from '../lib/state';
 
 interface AgentConfig {
   id: string;
