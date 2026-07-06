@@ -107,12 +107,15 @@ export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTermi
   };
 
   const launch = async (id: string, name: string) => {
+    console.log('[AgentStatusBar] launch() called:', id, name, 'onLaunchTerminal?', !!onLaunchTerminal);
     // Open a live embedded terminal in the cockpit grid (full interactive claude).
     if (onLaunchTerminal) {
+      console.log('[AgentStatusBar] Using onLaunchTerminal callback');
       onLaunchTerminal(id, name);
       return;
     }
     // Fallback: open an external PowerShell window if no embedded handler provided.
+    console.log('[AgentStatusBar] No onLaunchTerminal callback, using fallback API');
     if (launching) return;
     setLaunching(id);
     try {
@@ -125,6 +128,7 @@ export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTermi
   const createAgent = async () => {
     if (!form.name.trim() || creating) return;
     setCreating(true);
+    console.log('[AgentStatusBar] Creating agent:', form);
     try {
       const res = await fetch('/api/agents', {
         method: 'POST',
@@ -132,15 +136,24 @@ export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTermi
         body: JSON.stringify(form),
       });
       const data = await res.json();
+      console.log('[AgentStatusBar] API response:', data);
       if (data.config) {
         const agentId = data.config.id;
         const agentName = data.config.name;
+        console.log('[AgentStatusBar] Agent created, launching:', agentId, agentName);
         setForm({ name: '', emoji: '🤖', model: 'sonnet', prompt: '', workDir: '' });
         setShowForm(false);
         fetchConfigs();
         // Launch the agent terminal immediately after creation
-        setTimeout(() => launch(agentId, agentName), 300);
+        setTimeout(() => {
+          console.log('[AgentStatusBar] Calling launch:', agentId, agentName);
+          launch(agentId, agentName);
+        }, 300);
+      } else {
+        console.error('[AgentStatusBar] No config in response:', data);
       }
+    } catch (err) {
+      console.error('[AgentStatusBar] Failed to create agent:', err);
     } finally {
       setCreating(false);
     }
