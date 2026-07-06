@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readEvents, readApprovals, readAgents, readProjects, readAllChat, writeApproval } from '@/src/lib/state';
+import { readEvents, readApprovals, readAgents, readProjects, readAllChat, writeApproval, decideApproval } from '@/src/lib/state';
 import { startWatching } from '@/src/lib/watcher';
 import { mockApprovals } from '@/src/data/mock';
 
@@ -28,9 +28,13 @@ export async function GET() {
         testDataInitialized = true;
         for (const approval of mockApprovals) {
           try {
-            // Only write if not already on disk
             const existing = readApprovals('all').find((a) => a.id === approval.id);
-            if (!existing) {
+            if (existing && existing.status !== 'pending') {
+              // Reset stale test approval back to pending
+              decideApproval(approval.id, 'pending');
+              console.log(`[Stream] Reset test approval to pending: ${approval.id}`);
+            } else if (!existing) {
+              // Create new test approval
               writeApproval({ ...approval, status: 'pending', createdAt: approval.createdAt || new Date() });
               console.log(`[Stream] Initialized test approval: ${approval.id}`);
             }
