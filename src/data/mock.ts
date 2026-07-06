@@ -13,8 +13,35 @@ export const mockAgents: Agent[] = [];
 // Mock Projects — empty until real projects appear from connected agents
 export const mockProjects: Project[] = [];
 
-// Mock Approvals — empty
-export const mockApprovals: ApprovalRequest[] = [];
+// Mock Approvals — test data for auto-approve feature
+export const mockApprovals: ApprovalRequest[] = [
+  {
+    id: 'approval-test-1',
+    agentId: 'test-agent-1',
+    projectId: 'operator-cockpit',
+    status: 'pending',
+    action: 'Run: git push origin main',
+    rationale: 'Push latest changes to main branch after all tests pass',
+    riskLevel: 'high',
+    affectedSystems: ['GitHub', 'CI/CD Pipeline'],
+    expectedOutcome: 'Changes are pushed to remote repository and CI/CD pipeline is triggered',
+    approveButton: 'Push to main',
+    rejectButton: 'Cancel push',
+  },
+  {
+    id: 'approval-test-2',
+    agentId: 'test-agent-2',
+    projectId: 'operator-cockpit',
+    status: 'pending',
+    action: 'Run: npm install --save-dev @testing-library/react',
+    rationale: 'Add testing library dependency for unit tests',
+    riskLevel: 'low',
+    affectedSystems: ['Dependencies'],
+    expectedOutcome: 'New package is installed in node_modules and package.json is updated',
+    approveButton: 'Install',
+    rejectButton: 'Skip',
+  },
+];
 
 // Mock Events — empty
 export const mockEvents: AgentEvent[] = [];
