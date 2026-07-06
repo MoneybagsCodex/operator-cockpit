@@ -225,6 +225,11 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
       `→ ${sessionFile ? 'RESUME' : 'FRESH'} cwd=${cwd} args=${JSON.stringify(claudeArgs)} ` +
       `homedir=${os.homedir()} projectsDir=${CLAUDE_PROJECTS_DIR}`
     );
+    console.log(
+      `[terminal] connection details: mode=${url.searchParams.get('mode')} ` +
+      `label="${url.searchParams.get('label')}" agent="${url.searchParams.get('agent')}" ` +
+      `cols=${cols} rows=${rows}`
+    );
 
     // Spawn claude inside cmd.exe so PATH/.cmd resolution works on Windows.
     const isWin = process.platform === 'win32';

@@ -55,12 +55,20 @@ export default function Dashboard() {
   // Custom session names (persist across reloads), keyed by session id
   const [sessionNames, setSessionNames] = useState<Record<string, string>>({});
   useEffect(() => {
+    // Load session names from localStorage (browser persistence)
+    // Server-side metadata is persisted via /api/sessions/rename for cross-device support
     try { setSessionNames(JSON.parse(localStorage.getItem('cockpit-session-names') || '{}')); } catch { /* ignore */ }
   }, []);
   const renameSession = useCallback((sessionId: string, name: string) => {
     setSessionNames((prev) => {
       const next = { ...prev, [sessionId]: name };
       try { localStorage.setItem('cockpit-session-names', JSON.stringify(next)); } catch { /* ignore */ }
+      // Also persist to server-side session metadata
+      fetch('/api/sessions/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, name }),
+      }).catch((err) => console.error('[Cockpit] Failed to persist session name:', err));
       return next;
     });
   }, []);
@@ -140,7 +148,11 @@ export default function Dashboard() {
     try {
       const saved = JSON.parse(localStorage.getItem(TERMINALS_KEY) || '[]') as TerminalPanelState[];
       if (Array.isArray(saved) && saved.length > 0) {
-        console.log('[Cockpit] Restoring terminals from localStorage:', saved.map(t => ({ id: t.id, wsUrl: t.wsUrl })));
+        console.log('[Cockpit] Restoring terminals from localStorage:', saved.map(t => {
+          const sidMatch = t.wsUrl.match(/sid=([^&]*)/);
+          const sid = sidMatch ? decodeURIComponent(sidMatch[1]) : 'NO_SID';
+          return { id: t.id, rawId: t.rawId, title: t.title, sid, fullUrl: t.wsUrl };
+        }));
         setTerminalPanels(saved.slice(0, MAX_SESSIONS));
         restoredRef.current = true; // we restored panels → skip the 6h auto-open (avoids dupes)
       }
