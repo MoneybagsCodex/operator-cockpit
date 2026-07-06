@@ -332,68 +332,73 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
       style={linkColor ? { boxShadow: `inset 4px 0 0 ${linkColor}` } : undefined}
     >
       {/* Header */}
-      <div className="border-b border-slate-700 px-3 py-2 flex items-center justify-between gap-2 bg-slate-800">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          {linkColor
-            ? <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: linkColor }} title="Linked to a Jira ticket" />
-            : <TerminalSquare className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />}
-          {editing ? (
-            <input
-              autoFocus
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={saveRename}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') { e.preventDefault(); saveRename(); }
-                if (e.key === 'Escape') setEditing(false);
-              }}
-              className="min-w-0 flex-1 bg-slate-700 text-slate-100 text-sm font-semibold px-1.5 py-0.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-600"
-            />
-          ) : (
-            <span
-              className={`text-sm font-semibold text-slate-100 truncate ${onRename ? 'cursor-text' : ''}`}
-              onDoubleClick={onRename ? startRename : undefined}
-              title={onRename ? 'Double-click to rename' : undefined}
+      <div className="border-b border-slate-700 bg-slate-800">
+        {/* Title row */}
+        <div className="px-3 py-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {linkColor
+              ? <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: linkColor }} title="Linked to a Jira ticket" />
+              : <TerminalSquare className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />}
+            {editing ? (
+              <input
+                autoFocus
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={saveRename}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); saveRename(); }
+                  if (e.key === 'Escape') setEditing(false);
+                }}
+                className="min-w-0 flex-1 bg-slate-700 text-slate-100 text-sm font-semibold px-1.5 py-0.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-600"
+              />
+            ) : (
+              <span
+                className={`text-sm font-semibold text-slate-100 truncate ${onRename ? 'cursor-text' : ''}`}
+                onDoubleClick={onRename ? startRename : undefined}
+                title={onRename ? 'Double-click to rename' : undefined}
+              >
+                {title}
+              </span>
+            )}
+            {ended
+              ? <span className="text-[10px] uppercase tracking-wide text-slate-500 flex-shrink-0">ended</span>
+              : stalled
+              ? <span className="text-[10px] uppercase tracking-wide text-slate-500 flex-shrink-0" title="Refresh the page to reconnect">disconnected</span>
+              : reconnecting
+              ? <span className="text-[10px] uppercase tracking-wide text-amber-400 flex-shrink-0 animate-pulse">reconnecting…</span>
+              : <span className="text-[10px] uppercase tracking-wide text-cyan-400/70 flex-shrink-0">live</span>}
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {onRename && !editing && (
+              <button onClick={startRename} className="text-slate-500 hover:text-slate-300 transition-colors" title="Rename">
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {editing && (
+              <button onClick={saveRename} className="text-green-400 hover:text-green-300 transition-colors" title="Save name">
+                <Check className="w-4 h-4" />
+              </button>
+            )}
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-50"
+              title="Run sync-check for knowledge base coherence"
             >
-              {title}
-            </span>
-          )}
-          {ended
-            ? <span className="text-[10px] uppercase tracking-wide text-slate-500 flex-shrink-0">ended</span>
-            : stalled
-            ? <span className="text-[10px] uppercase tracking-wide text-slate-500 flex-shrink-0" title="Refresh the page to reconnect">disconnected</span>
-            : reconnecting
-            ? <span className="text-[10px] uppercase tracking-wide text-amber-400 flex-shrink-0 animate-pulse">reconnecting…</span>
-            : <span className="text-[10px] uppercase tracking-wide text-cyan-400/70 flex-shrink-0">live</span>}
+              {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              onClick={onClose}
+              className="text-slate-500 hover:text-slate-300 transition-colors"
+              title="Close terminal (ends the session)"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2.5 flex-shrink-0">
-          {/* Session metrics */}
+        {/* Metrics row */}
+        <div className="px-3 py-1.5 border-t border-slate-700/50">
           <SessionMetrics sessionId={extractSessionId(wsUrl)} />
-          {onRename && !editing && (
-            <button onClick={startRename} className="text-slate-500 hover:text-slate-300 transition-colors" title="Rename">
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-          )}
-          {editing && (
-            <button onClick={saveRename} className="text-green-400 hover:text-green-300 transition-colors" title="Save name">
-              <Check className="w-4 h-4" />
-            </button>
-          )}
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            className="text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-50"
-            title="Run sync-check for knowledge base coherence"
-          >
-            {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          </button>
-          <button
-            onClick={onClose}
-            className="text-slate-500 hover:text-slate-300 transition-colors"
-            title="Close terminal (ends the session)"
-          >
-            <X className="w-4 h-4" />
-          </button>
         </div>
       </div>
 
