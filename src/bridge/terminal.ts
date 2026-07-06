@@ -30,6 +30,7 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { isAutoApprovedForAgent, readApprovals } from '@/src/lib/state';
 
 interface AgentConfig {
   id: string;
@@ -45,6 +46,9 @@ interface Session {
   cols: number;
   rows: number;
   startedAt: number;                    // unix timestamp when session was created
+  agentId: string;                      // for approval tracking
+  approvalWatcher?: () => void;         // cleanup function for approval poller
+  watchedApprovals: Set<string>;        // already-seen approval IDs to avoid duplicate handling
   metrics: {
     totalLines: number;                 // newline count in all output
     totalChars: number;                 // total characters output
@@ -130,6 +134,57 @@ function ptyEnv(extra?: Record<string, string>): NodeJS.ProcessEnv {
   env.HOME = os.homedir();
   env.USERPROFILE = os.homedir();
   return env;
+}
+
+/**
+ * Watch for approval decisions for a specific agent and handle auto-approve.
+ * Writes decisions to the PTY's STDIN so interactive prompts can be answered.
+ */
+function setupApprovalBridge(session: Session): void {
+  const agentId = session.agentId;
+  const pollInterval = 500; // check every 500ms for new approvals
+
+  const pollApprovals = () => {
+    try {
+      const approvals = readApprovals('all');
+      const isAutoApproved = isAutoApprovedForAgent(agentId);
+
+      for (const approval of approvals) {
+        if (approval.agentId !== agentId) continue;
+        if (session.watchedApprovals.has(approval.id)) continue;
+        session.watchedApprovals.add(approval.id);
+
+        // If approval is already decided and auto-approve is on, handle it
+        if (isAutoApproved && approval.status !== 'pending') {
+          const response = approval.status === 'approved' ? 'y\n' : 'n\n';
+          try {
+            session.term.write(response);
+            console.log(
+              `[approval-bridge] Auto-approved for ${agentId}: ${approval.id} → ${response.trim()}`
+            );
+          } catch (err) {
+            console.warn(`[approval-bridge] Failed to write to PTY for ${agentId}:`, err);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`[approval-bridge] Error polling approvals for ${agentId}:`, err);
+    }
+  };
+
+  const timer = setInterval(pollApprovals, pollInterval);
+  session.approvalWatcher = () => clearInterval(timer);
+  pollApprovals(); // initial check
+}
+
+/**
+ * Stop watching approvals for a session.
+ */
+function cleanupApprovalBridge(session: Session): void {
+  if (session.approvalWatcher) {
+    session.approvalWatcher();
+    session.approvalWatcher = undefined;
+  }
 }
 
 /**
@@ -280,6 +335,9 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
       return;
     }
 
+    // Agent ID for approval tracking: use session label or session id
+    const agentId = agentLabel || `cockpit-${key.slice(0, 8)}`;
+
     const session: Session = {
       term,
       buffer: '',
@@ -288,10 +346,15 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
       cols,
       rows,
       startedAt: Date.now(),
+      agentId,
+      watchedApprovals: new Set(),
       metrics: { totalLines: 0, totalChars: 0, errorCount: 0 },
     };
     sessions.set(key, session);
-    console.log(`[terminal] spawned ${key} (${sessionFile ? 'resume' : 'fresh'}) in ${cwd} — pid ${term.pid}`);
+    console.log(`[terminal] spawned ${key} (${sessionFile ? 'resume' : 'fresh'}) in ${cwd} — pid ${term.pid} agentId=${agentId}`);
+
+    // Set up approval bridge so auto-approve works for this session
+    setupApprovalBridge(session);
 
     // Wire the pty ONCE. It pushes to whatever browser is currently attached and
     // keeps a rolling buffer for replay after a reconnect.
@@ -315,6 +378,7 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
         try { session.ws.close(); } catch { /* ignore */ }
       }
       if (session.detachTimer) clearTimeout(session.detachTimer);
+      cleanupApprovalBridge(session);
       sessions.delete(key);
       console.log(`[terminal] exited ${key} (exit ${exitCode})`);
     });

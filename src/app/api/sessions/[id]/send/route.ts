@@ -62,7 +62,6 @@ export async function POST(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId, workDir, message }),
-      // @ts-expect-error — Node fetch timeout signal
       signal: AbortSignal.timeout(310_000),
     });
   } catch (err) {

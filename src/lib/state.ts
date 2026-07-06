@@ -202,3 +202,55 @@ export function hasRealState(): boolean {
     return false;
   }
 }
+
+// Auto-approve settings — persists toggle state per agent
+
+const AUTO_APPROVE_FILE = path.join(STATE_DIR, 'auto-approve-settings.json');
+
+interface AutoApproveSettings {
+  [agentId: string]: boolean;
+}
+
+export function getAutoApproveSettings(): AutoApproveSettings {
+  return readJsonFile<AutoApproveSettings>(AUTO_APPROVE_FILE) ?? {};
+}
+
+export function setAutoApprove(agentId: string, enabled: boolean): void {
+  const settings = getAutoApproveSettings();
+  settings[agentId] = enabled;
+  writeJsonFile(AUTO_APPROVE_FILE, settings);
+}
+
+export function isAutoApprovedForAgent(agentId: string): boolean {
+  const settings = getAutoApproveSettings();
+  return settings[agentId] === true;
+}
+
+// Watch for newly approved decisions for a given agent
+export function watchApprovalFor(
+  agentId: string,
+  callback: (approval: ApprovalRequest, decision: ApprovalStatus) => void,
+  interval: number = 500
+): () => void {
+  let lastCheck: Record<string, ApprovalStatus> = {};
+
+  const check = () => {
+    const approvals = readApprovals('all');
+    for (const a of approvals) {
+      if (a.agentId !== agentId) continue;
+      const prev = lastCheck[a.id];
+      if (prev !== a.status) {
+        lastCheck[a.id] = a.status;
+        // Only notify on state change away from pending
+        if (prev === 'pending' && a.status !== 'pending') {
+          callback(a, a.status);
+        }
+      }
+    }
+  };
+
+  const timer = setInterval(check, interval);
+  check(); // initial check
+
+  return () => clearInterval(timer);
+}

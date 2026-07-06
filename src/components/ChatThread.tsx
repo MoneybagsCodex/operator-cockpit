@@ -229,63 +229,8 @@ export function ChatThread({ project, agent, messages, events, highlighted, read
                 return null;
               }
 
-              // ── Approval request (disabled — kept for type-narrowing below) ──
-              if (msg.type === 'approval-request') {
-                const isResolved = msg.approvalId ? resolvedApprovalIds.has(msg.approvalId) : false;
-                return (
-                  <div key={item.id} className="border border-yellow-600/50 bg-yellow-900/20 rounded-lg p-3 space-y-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-yellow-400 text-xs font-semibold uppercase tracking-wide">
-                        Approval Requested
-                      </span>
-                      {msg.approvalRiskLevel && (
-                        <span className={`text-xs px-1.5 py-0.5 rounded font-semibold ${riskColor(msg.approvalRiskLevel)} text-white`}>
-                          {msg.approvalRiskLevel.toUpperCase()}
-                        </span>
-                      )}
-                      {mounted && (
-                        <span className="text-xs text-slate-500 ml-auto">{formatTime(msg.timestamp)}</span>
-                      )}
-                    </div>
-                    <p className="text-sm font-semibold text-slate-100">{msg.approvalAction}</p>
-                    {msg.approvalRationale && (
-                      <p className="text-xs text-slate-400">{msg.approvalRationale}</p>
-                    )}
-                    {msg.approvalSystems && msg.approvalSystems.length > 0 && (
-                      <p className="text-xs text-slate-500">
-                        Systems: {msg.approvalSystems.join(', ')}
-                      </p>
-                    )}
-                    {isResolved ? (
-                      <p className="text-xs text-slate-500 italic">Decision recorded below</p>
-                    ) : onDecide && msg.approvalId ? (
-                      <div className="flex gap-2 pt-1">
-                        <button
-                          onClick={() => onDecide(msg.approvalId!, 'approved')}
-                          className="flex-1 bg-green-600 hover:bg-green-700 text-white py-1.5 rounded text-xs font-semibold transition-colors"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          onClick={() => onDecide(msg.approvalId!, 'rejected')}
-                          className="flex-1 bg-red-600 hover:bg-red-700 text-white py-1.5 rounded text-xs font-semibold transition-colors"
-                        >
-                          Reject
-                        </button>
-                        <button
-                          onClick={() => onDecide(msg.approvalId!, 'needs-revision')}
-                          className="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white py-1.5 rounded text-xs font-semibold transition-colors"
-                        >
-                          Revise
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              }
-
-              // ── Approval decision ──────────────────────────────────────────
-              if (msg.type === 'approval-decision') {
+              // ── Approval decision (dead code - filtered above) ──
+              if (false && msg.type === 'approval-decision') {
                 const isApproved = msg.approvalDecision === 'approved';
                 const isRejected = msg.approvalDecision === 'rejected';
                 return (

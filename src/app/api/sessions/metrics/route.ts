@@ -5,9 +5,9 @@ import http from 'http';
  * Query the bridge server for session metrics.
  * The bridge runs on localhost:3002 and maintains session state.
  */
-export async function GET() {
+export async function GET(): Promise<NextResponse> {
   try {
-    return await new Promise((resolve) => {
+    return await new Promise<NextResponse>((resolve) => {
       const req = http.get('http://127.0.0.1:3002/metrics', (res) => {
         let data = '';
         res.on('data', (chunk) => { data += chunk; });

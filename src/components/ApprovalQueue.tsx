@@ -7,13 +7,15 @@ interface ApprovalQueueProps {
   approvals: ApprovalRequest[];
   agents: Agent[];
   onDecide?: (id: string, decision: 'approved' | 'rejected' | 'needs-revision') => Promise<void>;
+  agentId?: string;
 }
 
-export function ApprovalQueue({ approvals, agents, onDecide }: ApprovalQueueProps) {
+export function ApprovalQueue({ approvals, agents, onDecide, agentId }: ApprovalQueueProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [approveAllArmed, setApproveAllArmed] = useState(false);
   const [approveAllBusy, setApproveAllBusy] = useState(false);
   const [autoApprove, setAutoApprove] = useState(false);
+  const [autoApproveSyncing, setAutoApproveSyncing] = useState(false);
   const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoInFlight = useRef<Set<string>>(new Set());
 
@@ -30,8 +32,25 @@ export function ApprovalQueue({ approvals, agents, onDecide }: ApprovalQueueProp
 
   // Auto-approve mode — like "skip permissions": approve every queued item as it
   // arrives, no review. Requires an explicit confirm to arm.
-  const toggleAutoApprove = () => {
-    if (autoApprove) { setAutoApprove(false); return; }
+  const toggleAutoApprove = async () => {
+    if (autoApprove) {
+      setAutoApproveSyncing(true);
+      try {
+        const agentIdToUse = agentId || 'global';
+        await fetch('/api/auto-approve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId: agentIdToUse, enabled: false }),
+        });
+      } catch (err) {
+        console.error('[AutoApprove] Failed to disable:', err);
+      } finally {
+        setAutoApproveSyncing(false);
+      }
+      setAutoApprove(false);
+      return;
+    }
+
     const isDebugMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug');
     const ok = isDebugMode || window.confirm(
       'Enable AUTO-APPROVE mode?\n\n' +
@@ -40,7 +59,23 @@ export function ApprovalQueue({ approvals, agents, onDecide }: ApprovalQueueProp
       'This is equivalent to running agents with permissions skipped.\n\n' +
       'Only enable if you fully trust every running session. Proceed?'
     );
-    if (ok) setAutoApprove(true);
+
+    if (ok) {
+      setAutoApproveSyncing(true);
+      try {
+        const agentIdToUse = agentId || 'global';
+        await fetch('/api/auto-approve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agentId: agentIdToUse, enabled: true }),
+        });
+      } catch (err) {
+        console.error('[AutoApprove] Failed to enable:', err);
+      } finally {
+        setAutoApproveSyncing(false);
+      }
+      setAutoApprove(true);
+    }
   };
 
   useEffect(() => {
@@ -118,8 +153,11 @@ export function ApprovalQueue({ approvals, agents, onDecide }: ApprovalQueueProp
       {/* Auto-approve mode toggle */}
       <button
         onClick={toggleAutoApprove}
+        disabled={autoApproveSyncing}
         className={`flex items-center justify-between gap-2 mb-3 px-2.5 py-1.5 rounded-md text-xs font-semibold border transition-colors ${
-          autoApprove
+          autoApproveSyncing
+            ? 'bg-slate-600 border-slate-600 text-slate-400 cursor-not-allowed'
+            : autoApprove
             ? 'bg-red-500/15 border-red-500/50 text-red-300 animate-pulse'
             : 'bg-slate-700/60 border-slate-600 text-slate-400 hover:text-slate-200'
         }`}
