@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
-import { readEvents, readApprovals, readAgents, readProjects, readAllChat } from '@/src/lib/state';
+import { readEvents, readApprovals, readAgents, readProjects, readAllChat, writeApproval } from '@/src/lib/state';
 import { startWatching } from '@/src/lib/watcher';
+import { mockApprovals } from '@/src/data/mock';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+
+// Track whether we've initialized test data
+let testDataInitialized = false;
 
 export async function GET() {
   const encoder = new TextEncoder();
@@ -18,6 +22,23 @@ export async function GET() {
           // client disconnected
         }
       };
+
+      // Initialize test approvals on first client connection
+      if (!testDataInitialized) {
+        testDataInitialized = true;
+        for (const approval of mockApprovals) {
+          try {
+            // Only write if not already on disk
+            const existing = readApprovals('all').find((a) => a.id === approval.id);
+            if (!existing) {
+              writeApproval({ ...approval, status: 'pending', createdAt: approval.createdAt || new Date() });
+              console.log(`[Stream] Initialized test approval: ${approval.id}`);
+            }
+          } catch (err) {
+            console.error(`[Stream] Failed to initialize test approval:`, err);
+          }
+        }
+      }
 
       // Send initial full state snapshot
       send('snapshot', {

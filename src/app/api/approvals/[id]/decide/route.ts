@@ -8,14 +8,19 @@ export async function POST(
 ) {
   const { decision, notes } = await req.json() as { decision: ApprovalStatus; notes?: string };
 
+  console.log(`[Decide] Processing approval: id=${params.id} decision=${decision}`);
+
   if (!decision || !['approved', 'rejected', 'needs-revision'].includes(decision)) {
     return NextResponse.json({ error: 'Invalid decision. Must be: approved, rejected, needs-revision' }, { status: 400 });
   }
 
   const updated = decideApproval(params.id, decision, notes);
   if (!updated) {
+    console.error(`[Decide] Approval not found: ${params.id}`);
     return NextResponse.json({ error: `Approval ${params.id} not found` }, { status: 404 });
   }
+
+  console.log(`[Decide] Success: ${params.id} → ${decision}`);
 
   // Echo the decision back into the chat thread so the conversation has a full audit trail
   const decisionMsg: ChatMessage = {

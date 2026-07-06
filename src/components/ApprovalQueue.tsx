@@ -36,11 +36,17 @@ export function ApprovalQueue({ approvals, agents, onDecide }: ApprovalQueueProp
 
   useEffect(() => {
     if (!autoApprove || !onDecide) return;
+    console.log(`[AutoApprove] Active with ${pendingApprovals.length} pending approvals`);
     for (const a of pendingApprovals) {
-      if (autoInFlight.current.has(a.id)) continue;
+      if (autoInFlight.current.has(a.id)) {
+        console.log(`[AutoApprove] Already in-flight: ${a.id}`);
+        continue;
+      }
+      console.log(`[AutoApprove] Approving: ${a.id} — ${a.action}`);
       autoInFlight.current.add(a.id);
       onDecide(a.id, 'approved')
-        .catch((err) => console.error('Auto-approve failed:', err))
+        .then(() => console.log(`[AutoApprove] Success: ${a.id}`))
+        .catch((err) => console.error(`[AutoApprove] Failed for ${a.id}:`, err))
         .finally(() => autoInFlight.current.delete(a.id));
     }
   }, [autoApprove, pendingApprovals, onDecide]);
