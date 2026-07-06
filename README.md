@@ -10,6 +10,7 @@ Real-time multi-agent monitoring and management dashboard for Claude AI operatio
 - **Session Metrics** — Uptime, token usage estimates, error detection, process IDs
 - **Color-Coded Tabs** — Visual distinction between agents via hash-based color assignment
 - **Session Persistence** — Resume interrupted conversations and reattach to running processes
+- **Fork Sessions** — Spin parallel agents on the same session to work in tandem from different angles
 - **Knowledge Base Integration** — Sync with DASHBOARD priorities and MEMORY notes
 - **Trust & Safety** — Pre-trust mode, permission controls, disconnect/reconnect resilience
 
@@ -120,6 +121,7 @@ npm run test:e2e:ui       # Interactive UI
 - [ ] Approval bridge to agents
 - [ ] System prompt templates
 - [ ] Working directory picker
+- [ ] Enhanced fork mode (shared context display, diff view)
 - [ ] Docker support
 - [ ] Cloud deployment (Vercel/AWS/GCP)
 

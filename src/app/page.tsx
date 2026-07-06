@@ -122,6 +122,10 @@ export default function Dashboard() {
     setTerminalPanels((prev) => prev.filter((t) => t.id !== panelId));
   }, []);
 
+  const forkSession = useCallback((sessionId: string, title: string) => {
+    openTerminal({ mode: 'resume', id: sessionId, title });
+  }, [openTerminal]);
+
   const pendingApprovals = approvals.filter((a) => a.status === 'pending');
 
   const hasRealProjects = projects.length > 0;
@@ -273,6 +277,7 @@ export default function Dashboard() {
                 trustSignal={trustSignal}
                 linkColor={tp.rawId.startsWith('jira-') ? jiraLinkColors[tp.rawId.slice('jira-'.length)] : undefined}
                 onRename={(name) => renameSession(tp.rawId, name)}
+                onFork={forkSession}
                 onClose={() => closeTerminal(tp.id)}
               />
             ))}

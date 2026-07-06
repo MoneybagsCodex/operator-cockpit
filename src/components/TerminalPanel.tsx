@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { X, TerminalSquare, Pencil, Check, Maximize2, Minimize2, RefreshCw, Loader2 } from 'lucide-react';
+import { X, TerminalSquare, Pencil, Check, Maximize2, Minimize2, RefreshCw, Loader2, GitBranch } from 'lucide-react';
 import { SessionMetrics } from './SessionMetrics';
 
 interface TerminalPanelProps {
@@ -16,6 +16,7 @@ interface TerminalPanelProps {
   /** Optional accent color linking this agent to its Jira ticket. */
   linkColor?: string;
   onRename?: (newName: string) => void;
+  onFork?: (sessionId: string, title: string) => void;
   onClose: () => void;
 }
 
@@ -74,7 +75,7 @@ function agentColor(agentName: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
-export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, onClose }: TerminalPanelProps) {
+export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, onFork, onClose }: TerminalPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -191,6 +192,24 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
     const next = draft.trim();
     if (next && onRename) onRename(next);
     setEditing(false);
+  };
+
+  const handleFork = () => {
+    if (!onFork) return;
+    const sessionId = extractSessionId(wsUrl);
+    if (!sessionId) {
+      if (termRef.current) {
+        termRef.current.write('\x1b[91m✗ Cannot fork: no session ID\x1b[0m\r\n');
+      }
+      return;
+    }
+    const forkedTitle = `${title} (fork)`;
+    onFork(sessionId, forkedTitle);
+    // Send FORK command to the Claude process
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'input', data: 'FORK\r' }));
+    }
   };
 
   const handleSync = async () => {
@@ -427,6 +446,16 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
             {editing && (
               <button onClick={saveRename} className="text-green-400 hover:text-green-300 transition-colors" title="Save name">
                 <Check className="w-4 h-4" />
+              </button>
+            )}
+            {onFork && (
+              <button
+                onClick={handleFork}
+                disabled={!ready || reconnecting}
+                className="text-slate-500 hover:text-purple-400 transition-colors disabled:opacity-50"
+                title="Fork session for parallel work"
+              >
+                <GitBranch className="w-3.5 h-3.5" />
               </button>
             )}
             <button
