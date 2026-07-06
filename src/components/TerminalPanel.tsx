@@ -33,6 +33,13 @@ function extractSessionId(wsUrl: string): string {
 function extractAgentName(wsUrl: string): string {
   try {
     const url = new URL(wsUrl);
+    console.log('[Color] Full URL:', wsUrl);
+    console.log('[Color] Parsed params:', {
+      agent: url.searchParams.get('agent'),
+      label: url.searchParams.get('label'),
+      mode: url.searchParams.get('mode'),
+    });
+
     // Try agent param first (launch mode)
     const agent = url.searchParams.get('agent');
     if (agent) {
@@ -41,9 +48,12 @@ function extractAgentName(wsUrl: string): string {
     }
     // Fall back to label (which is the display name)
     const label = url.searchParams.get('label');
-    const decoded = label ? decodeURIComponent(label) : 'session';
-    console.log('[Color] Using label:', decoded);
-    return decoded;
+    if (!label) {
+      console.log('[Color] No label found, using default');
+      return 'session';
+    }
+    console.log('[Color] Using label:', label);
+    return label;
   } catch (e) {
     console.log('[Color] Extract failed:', e);
     return 'session';
