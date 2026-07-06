@@ -21,10 +21,10 @@ export function ApprovalQueue({ approvals, agents, onDecide }: ApprovalQueueProp
 
   useEffect(() => {
     if (approvals.length > 0) {
-      console.log('[ApprovalQueue] All approvals:', approvals.map(a => ({ id: a.id, status: a.status, action: a.action })));
-      console.log('[ApprovalQueue] Pending count:', pendingApprovals.length);
-      const statuses = new Set(approvals.map(a => a.status));
-      console.log('[ApprovalQueue] Unique statuses:', Array.from(statuses));
+      approvals.forEach(a => {
+        console.log(`[ApprovalQueue] Approval: id=${a.id} status="${a.status}" action="${a.action}"`);
+      });
+      console.log(`[ApprovalQueue] Total: ${approvals.length}, Pending: ${pendingApprovals.length}`);
     }
   }, [approvals]);
 
