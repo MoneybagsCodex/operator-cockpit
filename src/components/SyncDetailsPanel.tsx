@@ -1,23 +1,41 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ChevronDown, AlertCircle } from 'lucide-react';
+
+interface Priority {
+  rank: string;
+  title: string;
+  area: string;
+  status: string;
+}
+
+interface DashboardData {
+  priorities: Priority[];
+  reminders: string[];
+  lastUpdated: string;
+}
 
 export function SyncDetailsPanel() {
   const [expanded, setExpanded] = useState(false);
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const dashboardPriorities = [
-    { title: 'Apply to Management Consulting Firm', status: 'NOT STARTED', fit: '9.5/10' },
-    { title: 'Submit EPIC Septic VBO application', status: 'DRAFT READY', fit: '9.5/10' },
-    { title: 'Add ZD-Writer + ZAA Bot to portfolio', status: 'DRAFTED', fit: '—' },
-    { title: 'Add CLAUDE_API_KEY to GitHub secrets', status: 'NOT STARTED', fit: '—' },
-  ];
+  useEffect(() => {
+    fetch('/api/dashboard/details')
+      .then(res => res.json())
+      .then(json => {
+        setData(json);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('[SyncDetailsPanel] Failed to fetch dashboard data:', err);
+        setLoading(false);
+      });
+  }, []);
 
-  const memoryNotes = [
-    'Phase 12: mechanism-driven building (evidence + iteration over identity)',
-    'Energy drains: swirl, ambiguity, open loops → prioritize clarity',
-    'Strategic Coherence: identity + energy must align with DASHBOARD priorities',
-  ];
+  const dashboardPriorities = data?.priorities || [];
+  const memoryNotes = data?.reminders || [];
 
   return (
     <div className="w-full bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
@@ -38,45 +56,57 @@ export function SyncDetailsPanel() {
 
       {expanded && (
         <div className="border-t border-slate-700 px-4 py-3 space-y-3 bg-slate-800/50">
-          {/* Priorities Section */}
-          <div>
-            <h4 className="text-xs font-semibold text-slate-300 uppercase mb-2">
-              Current Priorities
-            </h4>
-            <div className="space-y-1.5">
-              {dashboardPriorities.slice(0, 3).map((p, i) => (
-                <div key={i} className="text-xs text-slate-400 flex gap-2">
-                  <span className="text-slate-500">•</span>
-                  <span>
-                    {p.title}{' '}
-                    <span className="text-slate-500">({p.status})</span>
-                  </span>
+          {loading ? (
+            <div className="text-xs text-slate-500">Loading...</div>
+          ) : (
+            <>
+              {/* Priorities Section */}
+              {dashboardPriorities.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-300 uppercase mb-2">
+                    Current Priorities
+                  </h4>
+                  <div className="space-y-1.5">
+                    {dashboardPriorities.map((p, i) => (
+                      <div key={i} className="text-xs text-slate-400 flex gap-2">
+                        <span className="text-slate-500">•</span>
+                        <span>
+                          {p.title}{' '}
+                          <span className="text-slate-500">({p.status})</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
-            </div>
-          </div>
+              )}
 
-          {/* Important Notes Section */}
-          <div>
-            <h4 className="text-xs font-semibold text-slate-300 uppercase mb-2">
-              Key Reminders
-            </h4>
-            <div className="space-y-1.5">
-              {memoryNotes.map((note, i) => (
-                <div key={i} className="text-xs text-slate-400 flex gap-2">
-                  <span className="text-amber-500">⚡</span>
-                  <span>{note}</span>
+              {/* Important Notes Section */}
+              {memoryNotes.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-300 uppercase mb-2">
+                    Key Reminders
+                  </h4>
+                  <div className="space-y-1.5">
+                    {memoryNotes.map((note, i) => (
+                      <div key={i} className="text-xs text-slate-400 flex gap-2">
+                        <span className="text-amber-500">⚡</span>
+                        <span>{note}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
-            </div>
-          </div>
+              )}
 
-          {/* Sync Status */}
-          <div className="pt-2 border-t border-slate-700/50">
-            <p className="text-xs text-slate-500">
-              Last synced: <span className="text-slate-400">Today at 11:10 AM</span>
-            </p>
-          </div>
+              {/* Sync Status */}
+              {data?.lastUpdated && (
+                <div className="pt-2 border-t border-slate-700/50">
+                  <p className="text-xs text-slate-500">
+                    Last synced: <span className="text-slate-400">{new Date(data.lastUpdated).toLocaleTimeString()}</span>
+                  </p>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
