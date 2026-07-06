@@ -5,6 +5,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { X, TerminalSquare, Pencil, Check, Maximize2, Minimize2, RefreshCw, Loader2 } from 'lucide-react';
+import { SessionMetrics } from './SessionMetrics';
 
 interface TerminalPanelProps {
   title: string;
@@ -16,6 +17,16 @@ interface TerminalPanelProps {
   linkColor?: string;
   onRename?: (newName: string) => void;
   onClose: () => void;
+}
+
+// Extract session ID from WebSocket URL
+function extractSessionId(wsUrl: string): string {
+  try {
+    const url = new URL(wsUrl);
+    return url.searchParams.get('sid') || '';
+  } catch {
+    return '';
+  }
 }
 
 export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, onClose }: TerminalPanelProps) {
@@ -322,7 +333,7 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
     >
       {/* Header */}
       <div className="border-b border-slate-700 px-3 py-2 flex items-center justify-between gap-2 bg-slate-800">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           {linkColor
             ? <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: linkColor }} title="Linked to a Jira ticket" />
             : <TerminalSquare className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />}
@@ -354,6 +365,10 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
             : reconnecting
             ? <span className="text-[10px] uppercase tracking-wide text-amber-400 flex-shrink-0 animate-pulse">reconnecting…</span>
             : <span className="text-[10px] uppercase tracking-wide text-cyan-400/70 flex-shrink-0">live</span>}
+        </div>
+        {/* Session metrics */}
+        <div className="flex-shrink-0">
+          <SessionMetrics sessionId={extractSessionId(wsUrl)} />
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {onRename && !editing && (

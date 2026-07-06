@@ -44,6 +44,12 @@ interface Session {
   detachTimer: ReturnType<typeof setTimeout> | null;
   cols: number;
   rows: number;
+  startedAt: number;                    // unix timestamp when session was created
+  metrics: {
+    totalLines: number;                 // newline count in all output
+    totalChars: number;                 // total characters output
+    errorCount: number;                 // lines matching error patterns
+  };
 }
 
 const CLAUDE_PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
@@ -53,6 +59,25 @@ const CLAUDE_BIN_DIR = path.join(os.homedir(), '.local', 'bin');
 const sessions = new Map<string, Session>();
 const MAX_BUFFER = 200_000;              // ~200KB scrollback kept for replay
 const DETACH_GRACE_MS = 15 * 60 * 1000;  // keep an agent alive 15m after a disconnect
+
+// Export metrics for all sessions (called by bridge server)
+export function getSessionMetrics(): Record<string, unknown> {
+  const metrics: Record<string, unknown> = {};
+  for (const [sid, session] of sessions) {
+    const uptime = Date.now() - session.startedAt;
+    const tokenEstimate = Math.ceil(session.metrics.totalChars / 4); // rough estimate: 1 token ≈ 4 chars
+    metrics[sid] = {
+      pid: session.term.pid,
+      uptime,
+      uptimeSeconds: Math.floor(uptime / 1000),
+      lines: session.metrics.totalLines,
+      chars: session.metrics.totalChars,
+      tokens: tokenEstimate,
+      errors: session.metrics.errorCount,
+    };
+  }
+  return { sessions: metrics };
+}
 
 function loadAgentConfig(stateDir: string, agentId: string): AgentConfig | null {
   try {
@@ -255,7 +280,16 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
       return;
     }
 
-    const session: Session = { term, buffer: '', ws: null, detachTimer: null, cols, rows };
+    const session: Session = {
+      term,
+      buffer: '',
+      ws: null,
+      detachTimer: null,
+      cols,
+      rows,
+      startedAt: Date.now(),
+      metrics: { totalLines: 0, totalChars: 0, errorCount: 0 },
+    };
     sessions.set(key, session);
     console.log(`[terminal] spawned ${key} (${sessionFile ? 'resume' : 'fresh'}) in ${cwd} — pid ${term.pid}`);
 
@@ -264,6 +298,14 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
     term.onData((data: string) => {
       session.buffer += data;
       if (session.buffer.length > MAX_BUFFER) session.buffer = session.buffer.slice(-MAX_BUFFER);
+
+      // Update metrics
+      session.metrics.totalChars += data.length;
+      session.metrics.totalLines += (data.match(/\n/g) || []).length;
+      if (/ERROR|error|Exception|exception|Failed|failed|✗|✘/.test(data)) {
+        session.metrics.errorCount += 1;
+      }
+
       if (session.ws && session.ws.readyState === session.ws.OPEN) session.ws.send(data);
     });
 

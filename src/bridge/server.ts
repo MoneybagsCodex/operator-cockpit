@@ -19,7 +19,7 @@ import http from 'http';
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { attachTerminalServer } from './terminal';
+import { attachTerminalServer, getSessionMetrics } from './terminal';
 
 const PORT = parseInt(process.env.BRIDGE_PORT ?? '3002', 10);
 
@@ -323,6 +323,11 @@ const server = http.createServer(async (req, res) => {
       agents: sessions.size,
       sessions: [...sessions.keys()],
     });
+  }
+
+  // GET /metrics — return metrics for all active terminal sessions
+  if (req.method === 'GET' && url === '/metrics') {
+    return jsonResponse(res, 200, getSessionMetrics());
   }
 
   // DELETE /session/:agentId  — reset conversation (next send starts fresh)
