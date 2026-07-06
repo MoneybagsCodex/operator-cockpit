@@ -1,10 +1,9 @@
 import { readFileSync } from 'fs';
-import { resolve, expandUser } from 'path';
 
 // Expand ~ to home directory
 function expandHome(path: string): string {
   if (path.startsWith('~')) {
-    return process.env.HOME + path.slice(1);
+    return (process.env.HOME || '/Users/joshuaminton') + path.slice(1);
   }
   return path;
 }
