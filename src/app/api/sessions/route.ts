@@ -7,6 +7,17 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const CLAUDE_PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
+const SESSION_METADATA_DIR = path.join(os.homedir(), '.operator-state', 'session-metadata');
+
+function readSessionMetadata(sessionId: string): { name?: string } {
+  try {
+    const metaPath = path.join(SESSION_METADATA_DIR, `${sessionId}.json`);
+    const content = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+    return { name: content.name };
+  } catch {
+    return {};
+  }
+}
 
 export interface SessionMeta {
   id: string;
@@ -16,6 +27,8 @@ export interface SessionMeta {
   lastModified: string;
   sizeBytes: number;
   preview: string; // first user message, truncated
+  sessionName?: string; // custom name if user renamed it
+  agentId?: string; // agent ID if known
 }
 
 function projectLabel(dirName: string): string {
@@ -71,14 +84,17 @@ export async function GET() {
           try {
             const fstat = fs.statSync(filePath);
             if (fstat.size < 100) continue; // skip empty/metadata-only files
+            const sessionId = file.replace('.jsonl', '');
+            const metadata = readSessionMetadata(sessionId);
             sessions.push({
-              id: file.replace('.jsonl', ''),
+              id: sessionId,
               projectDir: dirName,
               projectLabel: projectLabel(dirName),
               filePath,
               lastModified: fstat.mtime.toISOString(),
               sizeBytes: fstat.size,
               preview: readPreview(filePath),
+              sessionName: metadata.name,
             });
           } catch { /* skip unreadable */ }
         }
