@@ -96,6 +96,20 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
     return () => clearTimeout(t);
   }, []);
 
+  // Reset reconnection counter when page becomes visible (user switches tabs)
+  // This allows stalled terminals to retry when user returns
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && stalled) {
+        attemptRef.current = 0;
+        setStalled(false);
+        setReconnecting(true);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [stalled]);
+
   // "Trust all" → re-arm acceptance and retry for ~8s.
   useEffect(() => {
     if (!trustSignal) return;
@@ -168,7 +182,7 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
     const safeFit = () => { try { fit.fit(); } catch { /* not ready */ } };
     safeFit();
 
-    const MAX_RECONNECT = 8; // after this many flaps, stop retrying (don't hot-loop)
+    const MAX_RECONNECT = 20; // increased from 8 to be more resilient to transient failures
 
     // (Re)open the socket for this panel's stable `sid`. On a *transient* drop we
     // retry with backoff; the bridge keeps the PTY alive (15m grace) so the same
@@ -178,7 +192,7 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
       const n = attemptRef.current++;
       if (n === 0) term.write('\r\n\x1b[90m[connection lost — reconnecting…]\x1b[0m\r\n');
       setReconnecting(true);
-      const delay = Math.min(1000 * 2 ** n, 10000); // 1s,2s,4s,8s,10s…
+      const delay = Math.min(1000 * 2 ** n, 15000); // 1s,2s,4s,8s,15s… (increased max from 10s to 15s)
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       reconnectTimer.current = setTimeout(connect, delay);
     };
