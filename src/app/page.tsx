@@ -93,7 +93,9 @@ export default function Dashboard() {
         : `mode=launch&sid=${encodeURIComponent(sid)}&agent=${encodeURIComponent(opts.id)}&label=${label}` +
           (opts.cwd ? `&cwd=${encodeURIComponent(opts.cwd)}` : '') +
           (opts.prompt ? `&prompt=${encodeURIComponent(opts.prompt)}` : '');
-      return [...prev, { id: panelId, rawId: opts.id, title: opts.title, wsUrl: `${BRIDGE_WS}/terminal?${q}` }];
+      const wsUrl = `${BRIDGE_WS}/terminal?${q}`;
+      console.log(`[Cockpit] openTerminal: mode=${opts.mode} id=${opts.id} title=${opts.title} → sid=${sid}`);
+      return [...prev, { id: panelId, rawId: opts.id, title: opts.title, wsUrl }];
     });
   }, []);
 
@@ -148,11 +150,15 @@ export default function Dashboard() {
     try {
       const saved = JSON.parse(localStorage.getItem(TERMINALS_KEY) || '[]') as TerminalPanelState[];
       if (Array.isArray(saved) && saved.length > 0) {
-        console.log('[Cockpit] Restoring terminals from localStorage:', saved.map(t => {
+        const restored = saved.map(t => {
           const sidMatch = t.wsUrl.match(/sid=([^&]*)/);
           const sid = sidMatch ? decodeURIComponent(sidMatch[1]) : 'NO_SID';
           return { id: t.id, rawId: t.rawId, title: t.title, sid, fullUrl: t.wsUrl };
-        }));
+        });
+        console.log('[Cockpit] Restored from localStorage:', restored.length, 'terminals');
+        restored.forEach((t, i) => {
+          console.log(`  [${i}] id=${t.id} rawId=${t.rawId} title=${t.title} sid=${t.sid}`);
+        });
         setTerminalPanels(saved.slice(0, MAX_SESSIONS));
         restoredRef.current = true; // we restored panels → skip the 6h auto-open (avoids dupes)
       }

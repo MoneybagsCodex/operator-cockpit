@@ -184,7 +184,7 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
     const existing = sessions.get(key);
     if (existing) {
       attachClient(key, existing, ws, cols, rows, /* replay */ true);
-      console.log(`[terminal] reattached ${key} (pid ${existing.term.pid})`);
+      console.log(`[terminal] ✓ REATTACHED ${key} (pid ${existing.term.pid})`);
       return;
     }
 
@@ -198,7 +198,9 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
       cwd = sessionCwd(sessionFile) ?? os.homedir();
       claudeArgs.push('--resume', key);
       if (!agentLabel) agentLabel = key.slice(0, 8);
+      console.log(`[terminal] ✓ RESUME from disk: ${key} @ ${sessionFile}`);
     } else {
+      console.log(`[terminal] ✗ FRESH: ${key} (no session file found in ${CLAUDE_PROJECTS_DIR})`);
       // Fresh — PIN the session id so this conversation can always be resumed later.
       const agentId = url.searchParams.get('agent') ?? '';
       const explicitCwd = url.searchParams.get('cwd');
