@@ -19,6 +19,13 @@ export function ApprovalQueue({ approvals, agents, onDecide }: ApprovalQueueProp
 
   const pendingApprovals = approvals.filter((a) => a.status === 'pending');
 
+  useEffect(() => {
+    if (approvals.length > 0) {
+      console.log('[ApprovalQueue] All approvals:', approvals.map(a => ({ id: a.id, status: a.status })));
+      console.log('[ApprovalQueue] Pending count:', pendingApprovals.length);
+    }
+  }, [approvals]);
+
   // Auto-approve mode — like "skip permissions": approve every queued item as it
   // arrives, no review. Requires an explicit confirm to arm.
   const toggleAutoApprove = () => {
