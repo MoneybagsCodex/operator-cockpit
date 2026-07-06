@@ -28,12 +28,42 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# ensure secrets/build/logs never committed
-.env*.local
-*.log
-.devall.*
-node_modules
-.next
-.operator-state
+# Machine-specific state
+.operator-state/
+~/.operator-state/
+
+# Secrets & credentials (never commit these)
+.env*
+!.env.example
+secrets/
+*.key
+*.pem
+*.pfx
+.aws/
+.azure/
+.gcp/
+CLAUDE_API_KEY
+GITHUB_TOKEN
+API_KEY
+AUTH_TOKEN
+
+# Testing
 test-results/
 playwright-report/
+
+# IDE & editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+
+# Logs
+*.log
+logs/
+
+# OS
+Thumbs.db
+.DS_Store
