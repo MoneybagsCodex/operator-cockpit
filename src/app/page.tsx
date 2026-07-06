@@ -140,10 +140,13 @@ export default function Dashboard() {
     try {
       const saved = JSON.parse(localStorage.getItem(TERMINALS_KEY) || '[]') as TerminalPanelState[];
       if (Array.isArray(saved) && saved.length > 0) {
+        console.log('[Cockpit] Restoring terminals from localStorage:', saved.map(t => ({ id: t.id, wsUrl: t.wsUrl })));
         setTerminalPanels(saved.slice(0, MAX_SESSIONS));
         restoredRef.current = true; // we restored panels → skip the 6h auto-open (avoids dupes)
       }
-    } catch { /* corrupt/empty → fall through to auto-open */ }
+    } catch (e) {
+      console.error('[Cockpit] Failed to restore terminals:', e);
+    }
     setHydrated(true);
   }, []);
 
@@ -151,7 +154,11 @@ export default function Dashboard() {
   // clobber the saved list with the initial empty state before restore runs).
   useEffect(() => {
     if (!hydrated) return;
-    try { localStorage.setItem(TERMINALS_KEY, JSON.stringify(terminalPanels)); } catch { /* ignore */ }
+    try {
+      const data = JSON.stringify(terminalPanels);
+      console.log('[Cockpit] Saving terminals to localStorage:', terminalPanels.map(t => ({ id: t.id, wsUrl: t.wsUrl })));
+      localStorage.setItem(TERMINALS_KEY, data);
+    } catch { /* ignore */ }
   }, [terminalPanels, hydrated]);
 
   // On load, auto-open recent active conversations (last 6h) as LIVE terminals —

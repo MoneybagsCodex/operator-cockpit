@@ -221,7 +221,9 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
 
     function connect() {
       if (disposedRef.current) return;
-      const ws = new WebSocket(`${wsUrl}&cols=${term.cols}&rows=${term.rows}`);
+      const fullUrl = `${wsUrl}&cols=${term.cols}&rows=${term.rows}`;
+      console.log('[TerminalPanel] Connecting to:', fullUrl);
+      const ws = new WebSocket(fullUrl);
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
 
