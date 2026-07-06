@@ -34,11 +34,13 @@ export function ApprovalQueue({ approvals, agents, onDecide }: ApprovalQueueProp
   };
 
   useEffect(() => {
-    if (!autoApprove) return;
+    if (!autoApprove || !onDecide) return;
     for (const a of pendingApprovals) {
       if (autoInFlight.current.has(a.id)) continue;
       autoInFlight.current.add(a.id);
-      Promise.resolve(onDecide?.(a.id, 'approved')).finally(() => autoInFlight.current.delete(a.id));
+      onDecide(a.id, 'approved')
+        .catch((err) => console.error('Auto-approve failed:', err))
+        .finally(() => autoInFlight.current.delete(a.id));
     }
   }, [autoApprove, pendingApprovals, onDecide]);
 
