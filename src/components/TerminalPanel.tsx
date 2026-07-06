@@ -29,6 +29,20 @@ function extractSessionId(wsUrl: string): string {
   }
 }
 
+// Generate a consistent color based on agent name
+function agentColor(agentName: string): string {
+  const colors = [
+    '#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6',
+    '#8b5cf6', '#ec4899', '#f43f5e', '#d97706', '#84cc16', '#10b981',
+  ];
+  let hash = 0;
+  for (let i = 0; i < agentName.length; i++) {
+    hash = ((hash << 5) - hash) + agentName.charCodeAt(i);
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return colors[Math.abs(hash) % colors.length];
+}
+
 export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, onClose }: TerminalPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -329,7 +343,11 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
       className={`min-h-0 bg-[#0b1120] border border-slate-700 flex flex-col overflow-hidden ${
         maximized ? 'fixed inset-0 z-50 rounded-none' : 'rounded-lg'
       } ${needsAttention ? 'agent-attention' : ''}`}
-      style={linkColor ? { boxShadow: `inset 4px 0 0 ${linkColor}` } : undefined}
+      style={{
+        boxShadow: linkColor
+          ? `inset 4px 0 0 ${linkColor}`
+          : `inset 0 3px 0 ${agentColor(title)}`,
+      }}
     >
       {/* Header */}
       <div className="border-b border-slate-700 bg-slate-800">
