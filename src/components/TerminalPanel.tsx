@@ -361,12 +361,14 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
 
   return (
     <div
-      className={`min-h-0 bg-[#0b1120] border border-slate-700 flex flex-col overflow-hidden ${
+      className={`min-h-0 bg-[#0b1120] flex flex-col overflow-hidden ${
         maximized ? 'fixed inset-0 z-50 rounded-none' : 'rounded-lg'
       } ${needsAttention ? 'agent-attention' : ''}`}
       style={{
-        borderTop: `3px solid ${agentColor(extractAgentName(wsUrl))}`,
-        boxShadow: linkColor ? `inset 4px 0 0 ${linkColor}` : 'none',
+        borderTop: `4px solid ${agentColor(extractAgentName(wsUrl))}`,
+        borderRight: `1px solid rgb(51, 65, 85)`,
+        borderBottom: `1px solid rgb(51, 65, 85)`,
+        borderLeft: linkColor ? `4px solid ${linkColor}` : `1px solid rgb(51, 65, 85)`,
       }}
     >
       {/* Header */}
