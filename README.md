@@ -11,6 +11,7 @@ Real-time multi-agent monitoring and management dashboard for Claude AI operatio
 - **Color-Coded Tabs** — Visual distinction between agents via hash-based color assignment
 - **Session Persistence** — Resume interrupted conversations and reattach to running processes
 - **Fork Sessions** — Spin parallel agents on the same session to work in tandem from different angles
+- **Collapsible Sidebar** — Toggle sidebar visibility to maximize terminal window space
 - **Knowledge Base Integration** — Sync with DASHBOARD priorities and MEMORY notes
 - **Trust & Safety** — Pre-trust mode, permission controls, disconnect/reconnect resilience
 

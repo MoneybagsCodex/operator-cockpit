@@ -11,6 +11,7 @@ import { BootSplash } from '@/src/components/BootSplash';
 import { SyncDetailsPanel } from '@/src/components/SyncDetailsPanel';
 import { useLiveState } from '@/src/hooks/useLiveState';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { Menu, X } from 'lucide-react';
 
 // Brand series colors used to visually link a Jira ticket to its spun agent.
 const LINK_COLORS = ['#1F5EFF', '#6202FF', '#2FE9DB', '#FB8F2C', '#87A8FF', '#E0483C'];
@@ -43,7 +44,22 @@ export default function Dashboard() {
   const [hydrated, setHydrated] = useState(false); // true once persisted panels are restored
   const [trustSignal, setTrustSignal] = useState(0);
   const [capNotice, setCapNotice] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true); // sidebar visibility toggle
   const trustAll = useCallback(() => setTrustSignal((n) => n + 1), []);
+
+  // Persist sidebar state to localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('cockpit-sidebar-open');
+      if (saved !== null) setSidebarOpen(JSON.parse(saved));
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('cockpit-sidebar-open', JSON.stringify(sidebarOpen));
+    } catch { /* ignore */ }
+  }, [sidebarOpen]);
 
   // Auto-dismiss the "max sessions" notice
   useEffect(() => {
@@ -245,18 +261,41 @@ export default function Dashboard() {
         />
 
         <div className="flex flex-1 overflow-hidden gap-4 p-4 min-h-0">
+          {/* Sidebar toggle button (visible when sidebar is hidden) */}
+          {!sidebarOpen && (
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="absolute left-4 top-20 z-40 p-2 text-slate-400 hover:text-slate-200 transition-colors"
+              title="Show sidebar"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+          )}
+
           {/* Sidebar */}
-          <div className="w-80 flex-shrink-0 min-h-0 flex flex-col gap-3 overflow-y-auto">
-            <SyncDetailsPanel />
-            {capNotice && (
-              <div className="bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs rounded-lg px-3 py-2">
-                Max {MAX_SESSIONS} sessions open. Close one (×) before opening another.
+          {sidebarOpen && (
+            <div className="w-80 flex-shrink-0 min-h-0 flex flex-col gap-3 overflow-y-auto">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-xs font-semibold text-slate-400 uppercase">Sidebar</span>
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  className="p-1 text-slate-400 hover:text-slate-200 transition-colors"
+                  title="Hide sidebar"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-            )}
-            <ApprovalQueue approvals={approvals} agents={displayAgents} onDecide={decide} />
-            <SprintTickets onSpinAgent={spinAgentForTicket} linkColors={jiraLinkColors} />
-            <SessionBrowser onOpen={openSessionLive} />
-          </div>
+              <SyncDetailsPanel />
+              {capNotice && (
+                <div className="bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs rounded-lg px-3 py-2">
+                  Max {MAX_SESSIONS} sessions open. Close one (×) before opening another.
+                </div>
+              )}
+              <ApprovalQueue approvals={approvals} agents={displayAgents} onDecide={decide} />
+              <SprintTickets onSpinAgent={spinAgentForTicket} linkColors={jiraLinkColors} />
+              <SessionBrowser onOpen={openSessionLive} />
+            </div>
+          )}
 
           {/* Chat grid — each panel gets a readable minimum height; grid scrolls when there are many */}
           <div
