@@ -62,7 +62,7 @@ const CLAUDE_BIN_DIR = path.join(os.homedir(), '.local', 'bin');
 // Live agents, keyed by stable session id. Survives browser disconnects.
 const sessions = new Map<string, Session>();
 const MAX_BUFFER = 200_000;              // ~200KB scrollback kept for replay
-const DETACH_GRACE_MS = 15 * 60 * 1000;  // keep an agent alive 15m after a disconnect
+const DETACH_GRACE_MS = 2 * 60 * 60 * 1000;  // keep an agent alive 2h after a disconnect
 
 // Export metrics for all sessions (called by bridge server)
 export function getSessionMetrics(): Record<string, unknown> {
