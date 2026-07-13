@@ -111,6 +111,14 @@ export default function Dashboard() {
           (opts.prompt ? `&prompt=${encodeURIComponent(opts.prompt)}` : '');
       const wsUrl = `${BRIDGE_WS}/terminal?${q}`;
       console.log(`[Cockpit] openTerminal: mode=${opts.mode} id=${opts.id} title=${opts.title} → sid=${sid}`);
+
+      // Register this session with the cockpit backend so it can be resumed even if file doesn't exist yet
+      fetch('/api/sessions/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'register', sid, label: opts.title, mode: opts.mode }),
+      }).catch(err => console.error('[Cockpit] Failed to register session:', err));
+
       return [...prev, { id: panelId, rawId: opts.id, title: opts.title, wsUrl }];
     });
   }, []);

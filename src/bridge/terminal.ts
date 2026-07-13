@@ -100,6 +100,18 @@ function findSessionFile(sessionId: string): string | null {
       if (fs.existsSync(candidate)) return candidate;
     }
   } catch { /* ignore */ }
+
+  // Check if this is an active session tracked by the cockpit
+  // (might exist in memory but not yet written to disk)
+  try {
+    const activeSessions = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.operator-state', 'active-sessions.json'), 'utf-8'));
+    const isActive = activeSessions.some((s: any) => s.sid === sessionId);
+    if (isActive) {
+      console.log(`[terminal] Session ${sessionId} is tracked as active (file may not exist yet)`);
+      return `ACTIVE:${sessionId}`; // Special marker for active sessions
+    }
+  } catch { /* no active sessions file */ }
+
   return null;
 }
 
@@ -302,7 +314,11 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
     const claudeArgs: string[] = [];
     let agentLabel = url.searchParams.get('label') || '';
 
-    if (sessionFile) {
+    if (sessionFile && sessionFile.startsWith('ACTIVE:')) {
+      // Session is tracked as active but file doesn't exist yet — resume anyway
+      claudeArgs.push('--resume', key);
+      console.log(`[terminal] ◀ RESUME (tracked active): ${key}`);
+    } else if (sessionFile) {
       cwd = sessionCwd(sessionFile) ?? os.homedir();
       claudeArgs.push('--resume', key);
       if (!agentLabel) agentLabel = key.slice(0, 8);
