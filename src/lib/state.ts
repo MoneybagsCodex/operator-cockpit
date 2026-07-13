@@ -98,11 +98,17 @@ export function decideApproval(
     if (fs.existsSync(candidate)) {
       sourceFile = candidate;
       approval = readJsonFile<ApprovalRequest>(candidate);
+      console.log(`[state] Found approval ${id} in ${s}: agentId=${approval?.agentId}`);
       break;
     }
   }
 
-  if (!sourceFile || !approval) return null;
+  if (!sourceFile || !approval) {
+    console.error(`[state] Approval ${id} not found in any status directory`);
+    return null;
+  }
+
+  console.log(`[state] Moving approval ${id} from ${approval.status} → ${decision} for agent ${approval.agentId}`);
 
   const updated: ApprovalRequest = {
     ...approval,
@@ -116,6 +122,7 @@ export function decideApproval(
     try { fs.unlinkSync(sourceFile); } catch { /* already moved */ }
   }
 
+  console.log(`[state] ✓ Approval moved: ${id} → ${decision}`);
   return updated;
 }
 

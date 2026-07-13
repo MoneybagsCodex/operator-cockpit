@@ -143,16 +143,31 @@ function ptyEnv(extra?: Record<string, string>): NodeJS.ProcessEnv {
 function setupApprovalBridge(session: Session): void {
   const agentId = session.agentId;
   const pollInterval = 500; // check every 500ms for new approvals
+  let logCounter = 0;
 
   const pollApprovals = () => {
     try {
       const approvals = readApprovals('all');
       const isAutoApproved = isAutoApprovedForAgent(agentId);
 
+      // Log periodically (every 10 polls = 5 seconds) to avoid spam
+      const shouldLog = logCounter % 10 === 0;
+      if (shouldLog) {
+        console.log(`[approval-bridge] Polling ${agentId}: ${approvals.length} total approvals, auto-approve=${isAutoApproved}, watched=${session.watchedApprovals.size}`);
+      }
+      logCounter++;
+
+      const relatedApprovals = approvals.filter((a) => a.agentId === agentId);
+      if (shouldLog && relatedApprovals.length > 0) {
+        console.log(`[approval-bridge] Related to ${agentId}:`, relatedApprovals.map((a) => ({ id: a.id, status: a.status, action: a.action })));
+      }
+
       for (const approval of approvals) {
         if (approval.agentId !== agentId) continue;
         if (session.watchedApprovals.has(approval.id)) continue;
         session.watchedApprovals.add(approval.id);
+
+        console.log(`[approval-bridge] New approval for ${agentId}: id=${approval.id} status="${approval.status}" action="${approval.action}"`);
 
         // If approval is already decided and auto-approve is on, handle it
         if (isAutoApproved && approval.status !== 'pending') {
@@ -160,11 +175,15 @@ function setupApprovalBridge(session: Session): void {
           try {
             session.term.write(response);
             console.log(
-              `[approval-bridge] Auto-approved for ${agentId}: ${approval.id} → ${response.trim()}`
+              `[approval-bridge] ✓ Auto-responded to ${agentId}/${approval.id}: ${response.trim()} (status=${approval.status})`
             );
           } catch (err) {
-            console.warn(`[approval-bridge] Failed to write to PTY for ${agentId}:`, err);
+            console.warn(`[approval-bridge] ✗ Failed to write to PTY for ${agentId}:`, err);
           }
+        } else if (!isAutoApproved) {
+          console.log(`[approval-bridge] Auto-approve OFF for ${agentId}, awaiting manual decision on ${approval.id}`);
+        } else {
+          console.log(`[approval-bridge] Approval ${approval.id} still pending, waiting for decision (auto-approve=${isAutoApproved})`);
         }
       }
     } catch (err) {
@@ -174,6 +193,7 @@ function setupApprovalBridge(session: Session): void {
 
   const timer = setInterval(pollApprovals, pollInterval);
   session.approvalWatcher = () => clearInterval(timer);
+  console.log(`[approval-bridge] Started watcher for ${agentId}`);
   pollApprovals(); // initial check
 }
 
