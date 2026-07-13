@@ -135,25 +135,31 @@ export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTermi
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });
+      console.log('[AgentStatusBar] API response status:', res.status);
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('[AgentStatusBar] API error response:', res.status, text);
+        return;
+      }
       const data = await res.json();
-      console.log('[AgentStatusBar] API response:', data);
+      console.log('[AgentStatusBar] API response body:', JSON.stringify(data));
       if (data.config) {
         const agentId = data.config.id;
         const agentName = data.config.name;
-        console.log('[AgentStatusBar] Agent created, launching:', agentId, agentName);
+        console.log('[AgentStatusBar] Agent created successfully:', agentId, agentName);
         setForm({ name: '', emoji: '🤖', model: 'sonnet', prompt: '', workDir: '' });
         setShowForm(false);
         fetchConfigs();
         // Launch the agent terminal immediately after creation
         setTimeout(() => {
-          console.log('[AgentStatusBar] Calling launch:', agentId, agentName);
+          console.log('[AgentStatusBar] Calling launch with:', agentId, agentName, 'callback?', !!onLaunchTerminal);
           launch(agentId, agentName);
         }, 300);
       } else {
-        console.error('[AgentStatusBar] No config in response:', data);
+        console.error('[AgentStatusBar] No config in response:', JSON.stringify(data));
       }
     } catch (err) {
-      console.error('[AgentStatusBar] Failed to create agent:', err);
+      console.error('[AgentStatusBar] Exception during createAgent:', err instanceof Error ? err.message : String(err));
     } finally {
       setCreating(false);
     }
