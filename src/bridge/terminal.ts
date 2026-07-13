@@ -164,13 +164,17 @@ function setupApprovalBridge(session: Session): void {
 
       for (const approval of approvals) {
         if (approval.agentId !== agentId) continue;
-        if (session.watchedApprovals.has(approval.id)) continue;
-        session.watchedApprovals.add(approval.id);
 
-        console.log(`[approval-bridge] New approval for ${agentId}: id=${approval.id} status="${approval.status}" action="${approval.action}"`);
+        const wasWatched = session.watchedApprovals.has(approval.id);
 
-        // If approval is already decided and auto-approve is on, handle it
+        // If auto-approve is on and approval is decided (not pending), respond to it
         if (isAutoApproved && approval.status !== 'pending') {
+          if (!wasWatched) {
+            // First time seeing this approval in decided state
+            console.log(`[approval-bridge] New decided approval for ${agentId}: id=${approval.id} status="${approval.status}" action="${approval.action}"`);
+          }
+          session.watchedApprovals.add(approval.id);
+
           const response = approval.status === 'approved' ? 'y\n' : 'n\n';
           try {
             session.term.write(response);
@@ -180,10 +184,14 @@ function setupApprovalBridge(session: Session): void {
           } catch (err) {
             console.warn(`[approval-bridge] ✗ Failed to write to PTY for ${agentId}:`, err);
           }
-        } else if (!isAutoApproved) {
-          console.log(`[approval-bridge] Auto-approve OFF for ${agentId}, awaiting manual decision on ${approval.id}`);
-        } else {
-          console.log(`[approval-bridge] Approval ${approval.id} still pending, waiting for decision (auto-approve=${isAutoApproved})`);
+        } else if (!wasWatched && approval.status === 'pending') {
+          // First time seeing this approval, it's pending, and auto-approve is off
+          session.watchedApprovals.add(approval.id);
+          if (isAutoApproved) {
+            console.log(`[approval-bridge] New pending approval for ${agentId}: id=${approval.id} action="${approval.action}" (auto-approve enabled, awaiting decision)`);
+          } else {
+            console.log(`[approval-bridge] New pending approval for ${agentId}: id=${approval.id} action="${approval.action}" (auto-approve OFF, awaiting manual decision)`);
+          }
         }
       }
     } catch (err) {
