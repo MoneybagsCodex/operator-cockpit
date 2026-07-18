@@ -41,12 +41,28 @@ export function SessionBrowser({ onOpen }: SessionBrowserProps) {
   const [filter, setFilter] = useState('');
 
   useEffect(() => {
-    if (!expanded || sessions.length > 0) return;
+    console.log(`[SessionBrowser] Effect: expanded=${expanded}, sessions.length=${sessions.length}`);
+    if (!expanded || sessions.length > 0) {
+      if (sessions.length > 0) {
+        console.log(`[SessionBrowser] Already loaded ${sessions.length} sessions, skipping fetch`);
+      }
+      return;
+    }
+    console.log('[SessionBrowser] Fetching sessions...');
     setLoading(true);
     fetch('/api/sessions')
-      .then((r) => r.json())
-      .then((d) => setSessions(d.sessions ?? []))
-      .catch(() => {})
+      .then((r) => {
+        console.log(`[SessionBrowser] API response status: ${r.status}`);
+        return r.json();
+      })
+      .then((d) => {
+        const loaded = d.sessions ?? [];
+        console.log(`[SessionBrowser] ✓ Loaded ${loaded.length} sessions`);
+        setSessions(loaded);
+      })
+      .catch((err) => {
+        console.error('[SessionBrowser] Error loading sessions:', err);
+      })
       .finally(() => setLoading(false));
   }, [expanded]);
 

@@ -44,15 +44,26 @@ export default function Dashboard() {
   const [hydrated, setHydrated] = useState(false); // true once persisted panels are restored
   const [trustSignal, setTrustSignal] = useState(0);
   const [capNotice, setCapNotice] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true); // sidebar visibility toggle
+  const [sidebarOpen, setSidebarOpen] = useState(true); // sidebar visibility toggle — ALWAYS starts open
   const trustAll = useCallback(() => setTrustSignal((n) => n + 1), []);
 
-  // Persist sidebar state to localStorage
+  // Persist sidebar state to localStorage (but always start open)
   useEffect(() => {
+    console.log('[Dashboard] Initializing, sidebar will be open');
     try {
+      // Load saved state but only if user explicitly closed it
       const saved = localStorage.getItem('cockpit-sidebar-open');
-      if (saved !== null) setSidebarOpen(JSON.parse(saved));
-    } catch { /* ignore */ }
+      if (saved === 'false') {
+        console.log('[Dashboard] Sidebar was closed, loading closed state');
+        setSidebarOpen(false);
+      } else {
+        console.log('[Dashboard] Sidebar open (default or saved)');
+        setSidebarOpen(true);
+      }
+    } catch (e) {
+      console.warn('[Dashboard] Error loading sidebar state:', e);
+      setSidebarOpen(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -94,9 +105,15 @@ export default function Dashboard() {
   const openTerminal = useCallback((opts: { mode: 'launch' | 'resume'; id: string; title: string; prompt?: string; cwd?: string }) => {
     const panelId = `term-${opts.mode}-${opts.id}`;
     const label = encodeURIComponent(opts.title);
+    console.log(`[openTerminal] Starting: mode=${opts.mode} id=${opts.id} title=${opts.title}`);
     setTerminalPanels((prev) => {
-      if (prev.some((t) => t.id === panelId)) return prev; // already open
+      console.log(`[openTerminal] Current panels: ${prev.length}/${MAX_SESSIONS}`);
+      if (prev.some((t) => t.id === panelId)) {
+        console.log(`[openTerminal] Panel already open: ${panelId}`);
+        return prev;
+      }
       if (prev.length >= MAX_SESSIONS) {
+        console.warn(`[openTerminal] At capacity (${MAX_SESSIONS}), refusing to open`);
         queueMicrotask(() => setCapNotice(true)); // at cap — refuse, notify
         return prev;
       }
@@ -110,16 +127,18 @@ export default function Dashboard() {
           (opts.cwd ? `&cwd=${encodeURIComponent(opts.cwd)}` : '') +
           (opts.prompt ? `&prompt=${encodeURIComponent(opts.prompt)}` : '');
       const wsUrl = `${BRIDGE_WS}/terminal?${q}`;
-      console.log(`[Cockpit] openTerminal: mode=${opts.mode} id=${opts.id} title=${opts.title} → sid=${sid}`);
+      console.log(`[openTerminal] ✓ Creating terminal: mode=${opts.mode} id=${opts.id} title=${opts.title} sid=${sid}`);
 
       // Register this session with the cockpit backend so it can be resumed even if file doesn't exist yet
       fetch('/api/sessions/track', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'register', sid, label: opts.title, mode: opts.mode }),
-      }).catch(err => console.error('[Cockpit] Failed to register session:', err));
+      }).catch(err => console.error('[openTerminal] Failed to register session:', err));
 
-      return [...prev, { id: panelId, rawId: opts.id, title: opts.title, wsUrl }];
+      const newPanels = [...prev, { id: panelId, rawId: opts.id, title: opts.title, wsUrl }];
+      console.log(`[openTerminal] Panels now: ${newPanels.length}`);
+      return newPanels;
     });
   }, []);
 
