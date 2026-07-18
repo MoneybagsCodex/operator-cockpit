@@ -413,19 +413,8 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
         session.metrics.errorCount += 1;
       }
 
-      // Detect Claude approval prompts and auto-respond if auto-approve is enabled
-      if (isAutoApprovedForAgent(session.agentId)) {
-        // Match Claude Code approval prompts like:
-        // "Do you want to..." "Do you approve?" "Accept?" "Continue?" etc.
-        if (/[Dd]o you (want|approve|accept|trust|confirm)|[Aa]ccept\?|[Cc]ontinue\?|[Yy]es, [Ii] (trust|approve)|bypass permissions\?/i.test(data)) {
-          try {
-            term.write('y\n');
-            console.log(`[approval-bridge] Auto-approved prompt for ${session.agentId}: ${data.slice(0, 60)}`);
-          } catch (err) {
-            console.warn(`[approval-bridge] Failed to auto-respond to approval prompt for ${session.agentId}:`, err);
-          }
-        }
-      }
+      // Auto-response to interactive prompts is disabled as it's interfering with normal terminal operation
+      // Interactive prompts must be handled through the approval queue system instead
 
       if (session.ws && session.ws.readyState === session.ws.OPEN) session.ws.send(data);
     });
