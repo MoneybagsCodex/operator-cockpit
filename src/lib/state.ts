@@ -230,7 +230,8 @@ export function setAutoApprove(agentId: string, enabled: boolean): void {
 
 export function isAutoApprovedForAgent(agentId: string): boolean {
   const settings = getAutoApproveSettings();
-  return settings[agentId] === true;
+  // Check agent-specific setting OR global setting
+  return settings[agentId] === true || settings['global'] === true;
 }
 
 // Watch for newly approved decisions for a given agent
