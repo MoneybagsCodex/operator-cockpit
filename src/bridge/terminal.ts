@@ -270,6 +270,7 @@ function attachClient(
   });
 
   ws.on('close', () => {
+    console.log(`[terminal] WS closed: ${key}`);
     if (session.ws !== ws) return; // a newer client already took over
     session.ws = null;
     // Keep the agent alive so a refresh/blip can re-attach with full context;
@@ -281,6 +282,10 @@ function attachClient(
       console.log(`[terminal] killed ${key} after ${DETACH_GRACE_MS / 1000}s idle`);
     }, DETACH_GRACE_MS);
     console.log(`[terminal] detached ${key} — keeping alive ${DETACH_GRACE_MS / 1000}s`);
+  });
+
+  ws.on('error', (err) => {
+    console.log(`[terminal] WS error: ${key} - ${err.message}`);
   });
 }
 
@@ -299,6 +304,7 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
 
     // Stable session id owned by the client. `session=` kept for back-compat.
     const key = url.searchParams.get('sid') || url.searchParams.get('session') || randomUUID();
+    console.log(`[terminal] WS connection: sid=${key} cols=${cols} rows=${rows} mode=${url.searchParams.get('mode')}`);
 
     // 1) Re-attach to a still-running agent (survived a brief disconnect/refresh).
     const existing = sessions.get(key);

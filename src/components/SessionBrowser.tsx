@@ -40,6 +40,14 @@ export function SessionBrowser({ onOpen }: SessionBrowserProps) {
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('');
 
+  const handleToggle = () => {
+    console.log('[SessionBrowser] Toggle clicked, expanded:', expanded, '-> toggling');
+    setExpanded(v => {
+      console.log('[SessionBrowser] State updated to:', !v);
+      return !v;
+    });
+  };
+
   useEffect(() => {
     console.log(`[SessionBrowser] Effect: expanded=${expanded}, sessions.length=${sessions.length}`);
     if (!expanded || sessions.length > 0) {
@@ -79,7 +87,7 @@ export function SessionBrowser({ onOpen }: SessionBrowserProps) {
     <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
       {/* Header */}
       <button
-        onClick={() => setExpanded((v) => !v)}
+        onClick={handleToggle}
         className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-700/50 transition-colors"
       >
         <div className="flex items-center gap-2">
