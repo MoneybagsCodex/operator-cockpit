@@ -21,6 +21,23 @@ export function ApprovalQueue({ approvals, agents, onDecide, agentId }: Approval
 
   const pendingApprovals = approvals.filter((a) => a.status === 'pending');
 
+  // Load auto-approve setting from API on mount
+  useEffect(() => {
+    const loadAutoApproveSetting = async () => {
+      try {
+        const response = await fetch('/api/auto-approve');
+        const data = await response.json();
+        const agentIdToCheck = agentId || 'global';
+        const isEnabled = data[agentIdToCheck] ?? false;
+        setAutoApprove(isEnabled);
+        console.log(`[ApprovalQueue] Loaded auto-approve setting: ${isEnabled}`);
+      } catch (err) {
+        console.error('[ApprovalQueue] Failed to load auto-approve setting:', err);
+      }
+    };
+    loadAutoApproveSetting();
+  }, [agentId]);
+
   useEffect(() => {
     if (approvals.length > 0) {
       approvals.forEach(a => {
