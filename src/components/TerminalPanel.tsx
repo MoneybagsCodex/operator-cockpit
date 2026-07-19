@@ -84,6 +84,7 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
   const respTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const outputBuf = useRef('');       // rolling recent terminal output (for prompt detection)
   const wantTrust = useRef(false);    // "Trust all" armed for this terminal
+  const generationRef = useRef(0);    // incremented on each mount — ensures old closures become no-ops
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [responding, setResponding] = useState(false); // green while output is streaming back
@@ -98,7 +99,7 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
   const readyRef = useRef(false);     // latest `ready` for use inside the WS closure
   const focusedRef = useRef(false);   // is the user currently in this terminal
   const attemptRef = useRef(0);       // reconnect attempt counter (drives backoff)
-  const disposedRef = useRef(false);  // component unmounting — suppress reconnect
+  const currentGenRef = useRef(0);    // generation of the currently active mount (for handler checks)
   useEffect(() => { readyRef.current = ready; }, [ready]);
 
   // Esc exits full-screen.
@@ -233,10 +234,11 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
 
   useEffect(() => {
     const sid = extractSessionId(wsUrl);
-    console.log(`[TerminalPanel] useEffect: sid=${sid} disposed=${disposedRef.current}`);
+    const gen = ++generationRef.current;
+    currentGenRef.current = gen;
+    console.log(`[TerminalPanel] useEffect mount: sid=${sid} gen=${gen}`);
     const el = containerRef.current;
     if (!el) return;
-    disposedRef.current = false;
 
     const term = new Terminal({
       cursorBlink: true,
@@ -265,7 +267,7 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
     // retry with backoff; the bridge keeps the PTY alive (15m grace) so the same
     // sid re-attaches and replays scrollback — no lost context, no manual refresh.
     const scheduleReconnect = () => {
-      if (disposedRef.current || closedByUser.current) return;
+      if (gen !== currentGenRef.current || closedByUser.current) return;
       const n = attemptRef.current++;
       if (n === 0) term.write('\r\n\x1b[90m[connection lost — reconnecting…]\x1b[0m\r\n');
       setReconnecting(true);
@@ -278,18 +280,18 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
     // Stop reconnecting and remove the panel so a dead id doesn't resurrect from
     // localStorage on the next refresh.
     const markEnded = () => {
-      if (disposedRef.current) return;
+      if (gen !== currentGenRef.current) return;
       setReconnecting(false);
       setEnded(true);
       if (reconnectTimer.current) { clearTimeout(reconnectTimer.current); reconnectTimer.current = null; }
       term.write('\r\n\x1b[90m[session ended — closing this window]\x1b[0m\r\n');
-      setTimeout(() => { if (!disposedRef.current) onClose(); }, 1600);
+      setTimeout(() => { if (gen === currentGenRef.current) onClose(); }, 1600);
     };
 
     // Repeated flaps (e.g. a backgrounded tab suspending IO) — stop retrying but
     // KEEP the panel; a refresh reconnects. Prevents the hot-loop reconnect storm.
     const markStalled = () => {
-      if (disposedRef.current) return;
+      if (gen !== currentGenRef.current) return;
       setReconnecting(false);
       setStalled(true);
       if (reconnectTimer.current) { clearTimeout(reconnectTimer.current); reconnectTimer.current = null; }
@@ -298,8 +300,8 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
 
     function connect() {
       const sid = extractSessionId(wsUrl);
-      if (disposedRef.current) {
-        console.log(`[TerminalPanel] connect() called but disposed=true, skipping (sid=${sid})`);
+      if (gen !== currentGenRef.current) {
+        console.log(`[TerminalPanel] connect() called but gen=${gen} !== current=${currentGenRef.current}, skipping (sid=${sid})`);
         return;
       }
       // Guard: prevent opening multiple concurrent connections to the same session
@@ -352,10 +354,10 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
       // actually exited / the conversation is gone → end (remove). If we just keep
       // flapping past the cap → stall (stop, keep panel). Otherwise reconnect.
       ws.onclose = () => {
-        console.log(`[TerminalPanel] WS onclose fired for ${extractSessionId(wsUrl)}`);
+        console.log(`[TerminalPanel] WS onclose fired for ${extractSessionId(wsUrl)} (gen=${gen})`);
         if (stableTimerRef.current) { clearTimeout(stableTimerRef.current); stableTimerRef.current = null; }
-        if (disposedRef.current || closedByUser.current) {
-          console.log(`[TerminalPanel] Suppressing reconnect: disposed=${disposedRef.current} closedByUser=${closedByUser.current}`);
+        if (gen !== currentGenRef.current || closedByUser.current) {
+          console.log(`[TerminalPanel] Suppressing reconnect: gen=${gen} current=${currentGenRef.current} closedByUser=${closedByUser.current}`);
           return;
         }
         const recent = outputBuf.current;
@@ -405,8 +407,9 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
 
     return () => {
       const sid = extractSessionId(wsUrl);
-      console.log(`[TerminalPanel] cleanup: sid=${sid} wsState=${wsRef.current?.readyState}`);
-      disposedRef.current = true; // suppress reconnect during teardown
+      console.log(`[TerminalPanel] cleanup: sid=${sid} gen=${gen} wsState=${wsRef.current?.readyState}`);
+      // Mark this generation as inactive so its handlers become no-ops.
+      // currentGenRef will be set to the new generation value by the next mount.
       if (reconnectTimer.current) { clearTimeout(reconnectTimer.current); reconnectTimer.current = null; }
       if (stableTimerRef.current) { clearTimeout(stableTimerRef.current); stableTimerRef.current = null; }
       ro.disconnect();
@@ -414,9 +417,8 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
       ta?.removeEventListener('focus', onFocus);
       ta?.removeEventListener('blur', onBlur);
       if (respTimer.current) clearTimeout(respTimer.current);
-      // NOTE: Don't close WebSocket here. React remounts components in StrictMode/dev,
-      // and closing during remount creates race conditions. Let the bridge's grace period handle cleanup.
-      // try { wsRef.current?.close(); } catch { /* ignore */ }
+      // NOTE: Don't close WebSocket here. The generation system ensures old closures are inert.
+      // Let the bridge's grace period handle cleanup after the session detaches.
       term.dispose();
     };
   }, [wsUrl]);
