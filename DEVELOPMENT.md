@@ -337,6 +337,272 @@ This DEVELOPMENT.md extends `/Users/joshuaminton/CLAUDE.md` with Operator Cockpi
 
 ---
 
+## 11. Debugging Toolkit & Inspection Checklist
+
+When a feature seems broken, inspect at all layers before assuming it's broken:
+
+### Layer 1: Backend API
+```bash
+# Test the endpoint directly
+curl -s http://localhost:3001/api/auto-approve | jq .
+
+# Check response status
+curl -w "\nStatus: %{http_code}\n" http://localhost:3001/api/auto-approve
+
+# Check server logs
+tail -50 /tmp/dev-server.log
+tail -50 /tmp/bridge.log
+```
+
+### Layer 2: Browser Console
+Open DevTools (F12) → Console tab. Look for:
+- `[ApprovalQueue]` logs (component state)
+- `[AutoApprove]` logs (feature logic)
+- Any red errors or yellow warnings
+- **Filter by component name** to isolate issues
+
+### Layer 3: Network Tab
+Open DevTools → Network tab. For each API call:
+- Request: Is it going to the right endpoint?
+- Response: Is status 200? Is data correct?
+- Timing: Is the call slow? Does it hang?
+
+**Example:** Auto-approve toggle not syncing
+- Open Network tab
+- Click toggle
+- Look for POST to `/api/auto-approve`
+- Check response contains `{"global": true}`
+- If response shows `false`, backend didn't save it
+
+### Layer 4: Storage/State
+Open DevTools → Storage tab:
+- **localStorage** — Session persistence (reload test)
+- Check keys: `operator-cockpit:*`
+- Verify data survives page reload
+
+### Layer 5: React DevTools
+Install React DevTools browser extension:
+- Inspect component state (`autoApprove` should be `true`)
+- Check if component is re-rendering when expected
+- Verify props match what you expect
+
+### Example: Toggle Debugging Flowchart
+```
+Toggle shows "OFF" but API says global=true?
+
+1. Check console for [ApprovalQueue] logs
+   → If no logs, component didn't mount properly
+   → If logs show fetching... false, API returned wrong value
+
+2. Check Network tab for GET /api/auto-approve
+   → If response is {"global": false}, backend state is wrong
+   → If response is {"global": true}, component didn't parse it
+
+3. Check React DevTools
+   → If autoApprove state = false, useEffect didn't run
+   → If autoApprove state = true, UI rendering is wrong
+
+4. Check localStorage
+   → If no entries, data isn't persisting
+
+This narrows it down to exactly which layer failed.
+```
+
+---
+
+## 12. Error Handling Standards
+
+Every feature must handle failure gracefully:
+
+### API Call Failures
+```typescript
+// ❌ Bad: Silent failure
+const response = await fetch('/api/auto-approve');
+setAutoApprove(response.json().global);
+
+// ✅ Good: Handle errors, log them
+const response = await fetch('/api/auto-approve');
+if (!response.ok) {
+  console.error(`[AutoApprove] API error: ${response.status}`);
+  setAutoApprove(false); // Safe default
+  return;
+}
+try {
+  const data = await response.json();
+  setAutoApprove(data.global ?? false);
+} catch (err) {
+  console.error(`[AutoApprove] Parse error:`, err);
+  setAutoApprove(false);
+}
+```
+
+### Network Failures
+```typescript
+// ❌ Bad: No timeout, no retry
+await fetch('/api/auto-approve');
+
+// ✅ Good: Timeout, retry, fallback
+const fetchWithTimeout = async (url, timeout = 5000) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    console.error(`[AutoApprove] Network error:`, err);
+    return null; // Return null on failure, caller handles it
+  }
+};
+```
+
+### Component Defaults
+- If API call fails, component should have a safe default state
+- Don't leave UI in a broken state
+- Log errors so they can be debugged
+
+---
+
+## 13. Contract Definition (Before Coding)
+
+Before building any feature, document the API contract:
+
+### API Contract Template
+```markdown
+## Auto-Approve Setting
+
+### GET /api/auto-approve
+Returns the current auto-approve settings
+
+**Response:**
+```json
+{
+  "global": true,                    // Global auto-approve enabled
+  "test-agent": true,                // Per-agent override
+  "cockpit-agent": false
+}
+```
+
+**Error Cases:**
+- 500: Server error reading settings
+- Response: `{"error": "Failed to read settings"}`
+
+### POST /api/auto-approve
+Set auto-approve for an agent
+
+**Request:**
+```json
+{
+  "agentId": "global",               // Or specific agent ID
+  "enabled": true
+}
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "agentId": "global",
+  "enabled": true
+}
+```
+
+**Error Cases:**
+- 400: Missing required fields
+- 500: Server error writing settings
+```
+
+**Why this matters:** Before building UI, you know:
+1. Exact response schema
+2. Error cases to handle
+3. Which fields are required
+4. What defaults to use if API fails
+
+No guessing. No surprises.
+
+---
+
+## 14. State Inspection Protocol
+
+When state doesn't match between backend and frontend:
+
+### Step 1: Verify Backend State
+```bash
+# Get raw API response
+curl -s http://localhost:3001/api/auto-approve | jq .
+
+# Get file system state (if persistent)
+cat ~/.operator-state/auto-approve-settings.json
+
+# Check bridge state (if cached)
+curl -s http://localhost:3002/metrics | jq '.auto_approve'
+```
+
+### Step 2: Verify Frontend State
+```javascript
+// In browser console:
+// Get component state
+document.querySelector('[data-testid="auto-approve-toggle"]').textContent
+
+// Get stored state
+localStorage.getItem('operator-cockpit:auto-approve')
+
+// Check React state (with React DevTools)
+// Components → ApprovalQueue → Props / State
+```
+
+### Step 3: Verify Sync
+```bash
+# Fetch API state
+API_STATE=$(curl -s http://localhost:3001/api/auto-approve | jq '.global')
+echo "API: $API_STATE"
+
+# Check what UI shows
+UI_STATE=$(curl -s http://localhost:3001 | grep -o "Auto-approve ON\|Auto-approve OFF")
+echo "UI: $UI_STATE"
+
+# If different, component didn't call useEffect or parsing failed
+```
+
+---
+
+## 15. Performance Baseline
+
+Before considering a feature "complete," establish performance baseline:
+
+```bash
+# Measure API response time
+time curl http://localhost:3001/api/auto-approve > /dev/null
+
+# Measure page load time
+curl -s http://localhost:3001 | wc -c
+```
+
+If any API call takes >1 second or page size >1MB, investigate.
+
+---
+
+## 16. Breaking Changes Protocol
+
+When changing an API contract:
+
+1. **Document the change** — old schema → new schema
+2. **Plan the migration** — how do old clients handle new response?
+3. **Add version header** — `X-API-Version: 2` to indicate breaking change
+4. **Deprecate gradually** — old and new endpoints can coexist
+5. **Update all clients** — frontend must handle new schema before deploying backend
+
+Example: If approval API changes from `{"status": "pending"}` to `{"state": "pending"}`:
+- Add new field: `{"status": "pending", "state": "pending"}`
+- Update UI to read `state` field
+- Migrate data and remove old field
+- Only then is the change backward-compatible
+
+**Never deploy a breaking change where old UI talks to new API** without verifying they're compatible.
+
+---
+
 ## Summary
 
 **The Non-Negotiable Rule:**
