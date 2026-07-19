@@ -30,7 +30,7 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { isAutoApprovedForAgent, readApprovals } from '../lib/state';
+import { isAutoApprovedForAgent, readApprovals, decideApproval } from '../lib/state';
 
 interface AgentConfig {
   id: string;
@@ -179,10 +179,30 @@ function setupApprovalBridge(session: Session): void {
 
         const wasWatched = session.watchedApprovals.has(approval.id);
 
-        // If auto-approve is on and approval is decided (not pending), respond to it
-        if (isAutoApproved && approval.status !== 'pending') {
+        // If auto-approve is on and approval is pending, automatically approve it
+        if (isAutoApproved && approval.status === 'pending' && !wasWatched) {
+          console.log(`[approval-bridge] Auto-approving pending approval for ${agentId}: id=${approval.id} action="${approval.action}"`);
+          session.watchedApprovals.add(approval.id);
+
+          // Move approval from pending → approved
+          try {
+            const decided = decideApproval(approval.id, 'approved', 'Auto-approved by bridge');
+            if (decided) {
+              console.log(`[approval-bridge] ✓ Moved approval to approved: ${approval.id}`);
+              // Auto-respond to terminal
+              try {
+                session.term.write('y\n');
+                console.log(`[approval-bridge] ✓ Auto-responded to ${agentId}/${approval.id}: y (auto-approved)`);
+              } catch (err) {
+                console.warn(`[approval-bridge] ✗ Failed to write to PTY for ${agentId}:`, err);
+              }
+            }
+          } catch (err) {
+            console.warn(`[approval-bridge] ✗ Failed to auto-approve ${approval.id}:`, err);
+          }
+        } else if (isAutoApproved && approval.status !== 'pending') {
+          // Auto-approve is on and approval is already decided, respond to it
           if (!wasWatched) {
-            // First time seeing this approval in decided state
             console.log(`[approval-bridge] New decided approval for ${agentId}: id=${approval.id} status="${approval.status}" action="${approval.action}"`);
           }
           session.watchedApprovals.add(approval.id);
@@ -196,14 +216,10 @@ function setupApprovalBridge(session: Session): void {
           } catch (err) {
             console.warn(`[approval-bridge] ✗ Failed to write to PTY for ${agentId}:`, err);
           }
-        } else if (!wasWatched && approval.status === 'pending') {
+        } else if (!wasWatched && approval.status === 'pending' && !isAutoApproved) {
           // First time seeing this approval, it's pending, and auto-approve is off
           session.watchedApprovals.add(approval.id);
-          if (isAutoApproved) {
-            console.log(`[approval-bridge] New pending approval for ${agentId}: id=${approval.id} action="${approval.action}" (auto-approve enabled, awaiting decision)`);
-          } else {
-            console.log(`[approval-bridge] New pending approval for ${agentId}: id=${approval.id} action="${approval.action}" (auto-approve OFF, awaiting manual decision)`);
-          }
+          console.log(`[approval-bridge] New pending approval for ${agentId}: id=${approval.id} action="${approval.action}" (auto-approve OFF, awaiting manual decision)`);
         }
       }
     } catch (err) {
