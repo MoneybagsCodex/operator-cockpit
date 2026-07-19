@@ -233,7 +233,7 @@ export function ApprovalQueue({ approvals, agents, onDecide, agentId }: Approval
                       </div>
                     </div>
 
-                    {approval.affectedSystems.length > 0 && (
+                    {approval.affectedSystems && approval.affectedSystems.length > 0 && (
                       <div>
                         <h4 className="text-xs font-semibold text-slate-300 uppercase mb-2">
                           Affected Systems
