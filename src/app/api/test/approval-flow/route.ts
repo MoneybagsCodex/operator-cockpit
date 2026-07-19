@@ -17,9 +17,12 @@ export async function POST(req: NextRequest) {
       agentId,
       action: 'git push',
       description: 'Test approval request for git push',
+      rationale: 'Testing auto-approve functionality',
+      affectedSystems: ['main-branch'],
+      expectedOutcome: 'Commit pushed to main',
       riskLevel: 'high' as const,
       status: 'pending' as const,
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
       projectId: agentId,
     };
     writeApproval(approval);

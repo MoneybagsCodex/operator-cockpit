@@ -10,9 +10,12 @@ export async function POST(req: NextRequest) {
     agentId,
     action,
     description: `Test approval request: ${action}`,
+    rationale: 'Test approval for development',
+    affectedSystems: ['test-system'],
+    expectedOutcome: 'Action completed successfully',
     riskLevel: 'medium' as const,
     status: 'pending' as const,
-    createdAt: new Date().toISOString(),
+    createdAt: new Date(),
     projectId: agentId,
   };
 
