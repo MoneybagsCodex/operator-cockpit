@@ -253,7 +253,8 @@ function attachClient(
   }
 
   // Redraw prior output so a reconnected browser shows the conversation history.
-  if (replay && session.buffer) {
+  // ALWAYS send replay buffer if one exists, even if replay=false (handles connection superseding).
+  if (session.buffer) {
     try {
       console.log(`[terminal] Sending ${session.buffer.length} bytes of replay buffer to ${key}`);
       ws.send(session.buffer);
