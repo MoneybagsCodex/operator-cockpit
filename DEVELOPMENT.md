@@ -146,22 +146,91 @@ Find bugs in production
 
 ---
 
-## 4. Code Review Checklist (Before Merge)
+## 4. Code Review (3-Round Process)
+
+### Round 1: Author Self-Review (Before Requesting Review)
+
+Author must verify:
+- [ ] Build passes (`npm run build`)
+- [ ] Tests added and passing
+- [ ] No console errors
+- [ ] Follows code style of repo
+- [ ] No hardcoded secrets
+
+**If any fail: Fix before requesting review. Do not ask reviewer to catch build failures.**
+
+### Round 2: Automated Checks (CI)
+
+CI/CD pipeline verifies:
+- [ ] Build succeeds
+- [ ] All tests pass (unit + integration + E2E)
+- [ ] Type checking passes
+- [ ] No security issues detected
+- [ ] Code coverage meets threshold
+
+**CI result:** 🟢 Pass or 🔴 Fail
+
+**If fail:** Author fixes and pushes again. Cycle repeats.
+
+### Round 3: Human Code Review (Peer Review)
+
+Reviewer checks:
 
 | Item | Check |
 |------|-------|
-| Build | ✅ `npm run build` passes, no TS errors |
-| Tests | ✅ New tests added + all pass |
-| API Contract | ✅ Frontend uses API exactly as documented |
-| Error Handling | ✅ All errors logged, user sees message |
-| State Sync | ✅ UI matches API after reload |
-| Console | ✅ No errors in DevTools console |
-| Performance | ✅ No new slowdowns, API calls <1s |
-| Security | ✅ No hardcoded secrets, input validated |
-| Docs | ✅ API/feature docs updated if changed |
-| Backwards Compat | ✅ Old clients can still use API |
+| **API Contract** | ✅ Frontend uses API exactly as documented |
+| **Error Handling** | ✅ All errors logged, user sees message |
+| **State Sync** | ✅ UI matches API after reload |
+| **Performance** | ✅ No new slowdowns, API calls <1s |
+| **Security** | ✅ No hardcoded secrets, input validated |
+| **Documentation** | ✅ API/feature docs updated if changed |
+| **Backwards Compat** | ✅ Old clients can still use API |
+| **Test Quality** | ✅ Tests cover happy path AND error cases |
+| **Edge Cases** | ✅ What happens if network fails? API times out? |
+| **Architecture** | ✅ Follows bottom-up pattern (API first, then UI) |
 
-**Send back if any fail. Do not merge.**
+**Reviewer sends feedback:** Comments or approval
+
+**If feedback:** Author addresses each comment, re-requests review.
+
+**If approved:** Reviewer clicks "Approve" → Ready to merge.
+
+### Round 4: Final Verification (Before Merge)
+
+Before clicking merge button:
+- [ ] All reviewer feedback addressed
+- [ ] CI still passing
+- [ ] 8-point quality gate passed (Section 3)
+- [ ] Author has tested in browser (manual verification)
+
+**After merge:**
+- Monitor logs for 1 hour
+- If issues, see Incident Response (Section 9)
+
+---
+
+## Review Anti-Patterns
+
+❌ **Don't approve if:**
+- Build is failing (CI should catch, but verify)
+- Tests are missing for new code
+- Error handling is missing or silent
+- State sync not verified (reload test failed)
+- Documentation is incomplete
+- Known architectural issues are ignored
+
+❌ **Don't request review if:**
+- Your code doesn't build
+- Tests are failing
+- You know there are TODOs or bugs
+- You haven't tested it yourself
+
+✅ **Do approve if:**
+- All 3 rounds complete
+- Feedback addressed
+- Tests are comprehensive
+- Architecture is sound
+- Code is maintainable
 
 ---
 
