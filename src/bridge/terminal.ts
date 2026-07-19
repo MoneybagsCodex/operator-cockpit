@@ -62,7 +62,7 @@ const CLAUDE_BIN_DIR = path.join(os.homedir(), '.local', 'bin');
 // Live agents, keyed by stable session id. Survives browser disconnects.
 const sessions = new Map<string, Session>();
 const MAX_BUFFER = 200_000;              // ~200KB scrollback kept for replay
-const DETACH_GRACE_MS = 2 * 60 * 60 * 1000;  // keep an agent alive 2h after a disconnect
+const DETACH_GRACE_MS = 10 * 60 * 1000;  // keep an agent alive 10m after a disconnect (balances cleanup vs reconnect resilience)
 
 // Export metrics for all sessions (called by bridge server)
 export function getSessionMetrics(): Record<string, unknown> {
@@ -253,7 +253,14 @@ function attachClient(
   }
 
   // Redraw prior output so a reconnected browser shows the conversation history.
-  if (replay && session.buffer) { try { ws.send(session.buffer); } catch { /* ignore */ } }
+  if (replay && session.buffer) {
+    try {
+      console.log(`[terminal] Sending ${session.buffer.length} bytes of replay buffer to ${key}`);
+      ws.send(session.buffer);
+    } catch (err) {
+      console.log(`[terminal] ERROR sending replay: ${err}`);
+    }
+  }
 
   ws.on('message', (raw: Buffer) => {
     let msg: { type?: string; data?: string; cols?: number; rows?: number } | null = null;
@@ -270,8 +277,11 @@ function attachClient(
   });
 
   ws.on('close', () => {
-    console.log(`[terminal] WS closed: ${key}`);
-    if (session.ws !== ws) return; // a newer client already took over
+    console.log(`[terminal] WS closed: ${key} | isCurrentWs=${session.ws === ws} | hadReplay=${replay}`);
+    if (session.ws !== ws) {
+      console.log(`[terminal]   → supressed: newer client already has this session`);
+      return; // a newer client already took over
+    }
     session.ws = null;
     // Keep the agent alive so a refresh/blip can re-attach with full context;
     // only kill it if nobody comes back within the grace window.

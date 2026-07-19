@@ -232,6 +232,7 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
   };
 
   useEffect(() => {
+    console.log(`[TerminalPanel] useEffect fired for wsUrl: ${wsUrl}`);
     const el = containerRef.current;
     if (!el) return;
     disposedRef.current = false;
@@ -296,6 +297,12 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
 
     function connect() {
       if (disposedRef.current) return;
+      // Guard: prevent opening multiple concurrent connections to the same session
+      const existingWs = wsRef.current;
+      if (existingWs && (existingWs.readyState === WebSocket.CONNECTING || existingWs.readyState === WebSocket.OPEN)) {
+        console.log(`[TerminalPanel] WebSocket already exists in state ${existingWs.readyState}, skipping duplicate connect`);
+        return;
+      }
       const fullUrl = `${wsUrl}&cols=${term.cols}&rows=${term.rows}`;
       console.log('[TerminalPanel] Connecting to:', fullUrl);
       const ws = new WebSocket(fullUrl);
@@ -336,12 +343,25 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
       // actually exited / the conversation is gone → end (remove). If we just keep
       // flapping past the cap → stall (stop, keep panel). Otherwise reconnect.
       ws.onclose = () => {
+        console.log(`[TerminalPanel] WS onclose fired for ${extractSessionId(wsUrl)}`);
         if (stableTimerRef.current) { clearTimeout(stableTimerRef.current); stableTimerRef.current = null; }
-        if (disposedRef.current || closedByUser.current) return;
+        if (disposedRef.current || closedByUser.current) {
+          console.log(`[TerminalPanel] Suppressing reconnect: disposed=${disposedRef.current} closedByUser=${closedByUser.current}`);
+          return;
+        }
         const recent = outputBuf.current;
         const sessionGone = /session[\s\S]{0,60}not found|no conversation found|\[session ended/i.test(recent);
-        if (sessionGone) { markEnded(); return; }
-        if (attemptRef.current >= MAX_RECONNECT) { markStalled(); return; }
+        if (sessionGone) {
+          console.log(`[TerminalPanel] Session marked as gone`);
+          markEnded();
+          return;
+        }
+        if (attemptRef.current >= MAX_RECONNECT) {
+          console.log(`[TerminalPanel] Max reconnect attempts (${attemptRef.current}) exceeded`);
+          markStalled();
+          return;
+        }
+        console.log(`[TerminalPanel] Scheduling reconnect (attempt ${attemptRef.current})`);
         scheduleReconnect();
       };
       ws.onerror = () => { /* onclose follows; reconnect handles recovery */ };
