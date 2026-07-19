@@ -232,7 +232,8 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
   };
 
   useEffect(() => {
-    console.log(`[TerminalPanel] useEffect fired for wsUrl: ${wsUrl}`);
+    const sid = extractSessionId(wsUrl);
+    console.log(`[TerminalPanel] useEffect: sid=${sid} disposed=${disposedRef.current}`);
     const el = containerRef.current;
     if (!el) return;
     disposedRef.current = false;
@@ -296,15 +297,23 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
     };
 
     function connect() {
-      if (disposedRef.current) return;
-      // Guard: prevent opening multiple concurrent connections to the same session
-      const existingWs = wsRef.current;
-      if (existingWs && (existingWs.readyState === WebSocket.CONNECTING || existingWs.readyState === WebSocket.OPEN)) {
-        console.log(`[TerminalPanel] WebSocket already exists in state ${existingWs.readyState}, skipping duplicate connect`);
+      const sid = extractSessionId(wsUrl);
+      if (disposedRef.current) {
+        console.log(`[TerminalPanel] connect() called but disposed=true, skipping (sid=${sid})`);
         return;
       }
+      // Guard: prevent opening multiple concurrent connections to the same session
+      const existingWs = wsRef.current;
+      if (existingWs) {
+        const state = existingWs.readyState;
+        console.log(`[TerminalPanel] connect() - existing WS in state ${state} (sid=${sid})`);
+        if (state === WebSocket.CONNECTING || state === WebSocket.OPEN) {
+          console.log(`[TerminalPanel] → Skipping new connect, reusing existing`);
+          return;
+        }
+      }
       const fullUrl = `${wsUrl}&cols=${term.cols}&rows=${term.rows}`;
-      console.log('[TerminalPanel] Connecting to:', fullUrl);
+      console.log(`[TerminalPanel] Opening new WS (sid=${sid})`);
       const ws = new WebSocket(fullUrl);
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
@@ -395,6 +404,8 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
     ro.observe(el);
 
     return () => {
+      const sid = extractSessionId(wsUrl);
+      console.log(`[TerminalPanel] cleanup: sid=${sid} wsState=${wsRef.current?.readyState}`);
       disposedRef.current = true; // suppress reconnect during teardown
       if (reconnectTimer.current) { clearTimeout(reconnectTimer.current); reconnectTimer.current = null; }
       if (stableTimerRef.current) { clearTimeout(stableTimerRef.current); stableTimerRef.current = null; }
@@ -403,7 +414,9 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
       ta?.removeEventListener('focus', onFocus);
       ta?.removeEventListener('blur', onBlur);
       if (respTimer.current) clearTimeout(respTimer.current);
-      try { wsRef.current?.close(); } catch { /* ignore */ }
+      // NOTE: Don't close WebSocket here. React remounts components in StrictMode/dev,
+      // and closing during remount creates race conditions. Let the bridge's grace period handle cleanup.
+      // try { wsRef.current?.close(); } catch { /* ignore */ }
       term.dispose();
     };
   }, [wsUrl]);
