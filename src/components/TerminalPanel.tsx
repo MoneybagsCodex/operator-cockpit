@@ -419,7 +419,9 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
       if (respTimer.current) clearTimeout(respTimer.current);
       // NOTE: Don't close WebSocket here. The generation system ensures old closures are inert.
       // Let the bridge's grace period handle cleanup after the session detaches.
-      term.dispose();
+      // CRITICAL: Don't dispose terminal on unmount. React StrictMode double-mounts destroy then recreate,
+      // losing DOM and causing data to be written to disposed terminals. Let terminal persist across remounts.
+      // term.dispose();
     };
   }, [wsUrl]);
 
