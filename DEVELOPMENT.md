@@ -603,9 +603,361 @@ Example: If approval API changes from `{"status": "pending"}` to `{"state": "pen
 
 ---
 
-## Summary
+---
 
-**The Non-Negotiable Rule:**
+## 17. Testing Strategy (Test Pyramid)
+
+Every feature needs tests at three levels:
+
+### Unit Tests (Bottom — Most Tests)
+- Individual functions/components in isolation
+- Mock external dependencies
+- Test logic, not implementation
+- Example: Approval decision logic returns correct status
+
+```typescript
+// ✅ Good unit test
+test('decideApproval moves approval from pending to approved', () => {
+  const approval = { id: '1', status: 'pending', action: 'test' };
+  const result = decideApproval(approval.id, 'approved');
+  expect(result.status).toBe('approved');
+});
+```
+
+### Integration Tests (Middle — Some Tests)
+- Component + API interaction
+- Use real API, not mocks
+- Test data flow end-to-end
+- Example: ApprovalQueue component fetches and displays auto-approve setting
+
+```typescript
+// ✅ Good integration test
+test('ApprovalQueue loads auto-approve setting on mount', async () => {
+  render(<ApprovalQueue approvals={[]} />);
+  await waitFor(() => {
+    expect(screen.getByText(/Auto-approve ON/)).toBeInTheDocument();
+  });
+});
+```
+
+### End-to-End Tests (Top — Fewest Tests)
+- Real user journey in real browser
+- User opens UI → clicks buttons → sees results
+- Example: User enables auto-approve, approval is automatically decided
+
+```bash
+# E2E test (Playwright/Cypress)
+1. Navigate to http://localhost:3001
+2. Click "Auto-approve" toggle
+3. Confirm dialog
+4. Verify toggle shows "ON"
+5. Verify pending approval was auto-decided
+6. Verify approval queue count decreased
+```
+
+**Rule:** Every feature needs unit + integration + at least one E2E path.
+
+---
+
+## 18. Code Review Checklist (Before Merge)
+
+Reviewer must verify:
+
+- [ ] **Build passes** — TypeScript, no warnings
+- [ ] **Tests added** — Unit + integration + E2E for new code
+- [ ] **Tests pass** — All regression tests passing
+- [ ] **API contract matches** — Frontend uses API exactly as documented
+- [ ] **Error handling** — Errors logged, user sees message, no silent failures
+- [ ] **State sync** — Frontend state matches backend state after reload
+- [ ] **No console errors** — Check browser dev tools
+- [ ] **Performance** — No new slowdowns, API calls <1s
+- [ ] **Security** — No hardcoded secrets, input validated, XSS prevented
+- [ ] **Docs updated** — API changes, new parameters, breaking changes documented
+- [ ] **Backwards compatible** — Old clients can still use API
+- [ ] **Database migration** — If schema changed, migration tested
+
+If any fail: **Send back, don't merge.**
+
+---
+
+## 19. Deployment Procedure (Safe Rollout)
+
+### Pre-Deployment (Same Commit)
+1. All tests pass
+2. All code review checks pass
+3. DEVELOPMENT.md quality gate checklist: ✅
+4. Performance baseline verified
+5. Zero console errors in staging
+
+### Deployment Steps (In Order)
+1. Merge to main (not before this)
+2. Tag release: `git tag v1.2.3`
+3. Push tags: `git push origin v1.2.3`
+4. CI/CD runs full test suite
+5. Deploy to staging first
+6. Smoke test in staging (manual)
+7. If OK, deploy to production
+8. Health check: `/health` endpoint responds
+9. Spot check: Key features work
+10. Monitor: Watch logs for errors
+
+### Post-Deployment (First Hour)
+- [ ] Server responding on all ports
+- [ ] No spike in error rate
+- [ ] API response times normal
+- [ ] No new console errors
+- [ ] Database queries performing
+- [ ] User reports flowing in (watch Slack/email)
+
+### If Something Breaks
+- **< 5 min to diagnosis:** Keep investigating
+- **> 5 min to fix:** Rollback immediately (see Section 20)
+
+---
+
+## 20. Rollback Procedure (Emergency)
+
+When a deployment causes production issues:
+
+### Immediate (First Action)
+```bash
+# Get previous working tag
+git describe --tags --abbrev=0  # e.g., v1.2.2
+
+# Rollback to previous version
+git reset --hard v1.2.2
+git push --force origin main
+
+# Restart services
+npm run build
+npm run dev &
+npm run bridge &
+
+# Verify
+curl http://localhost:3001/health
+curl http://localhost:3002/health
+```
+
+### Document What Broke
+1. What was the change? (git log)
+2. What broke? (user impact, specific feature)
+3. Why didn't tests catch it? (test gap)
+4. How to prevent next time? (new test, new check)
+
+### Never Repeat
+- Add test case for what broke
+- Update DEVELOPMENT.md if new pattern discovered
+- Post-incident: PR to fix root cause (don't just rollback and forget)
+
+---
+
+## 21. Monitoring & Alerting (Catch Issues Early)
+
+### What to Monitor
+
+**Server Health**
+```bash
+# Health check endpoint
+curl http://localhost:3002/health
+# Should return: {"ok": true, "uptime": "1h 23m"}
+```
+
+**Error Rate**
+```bash
+# Count errors in last hour
+tail -100 /tmp/bridge.log | grep -i error | wc -l
+# Alert if > 5 errors per hour
+```
+
+**Performance**
+```bash
+# API response times
+curl -w "Time: %{time_total}s\n" http://localhost:3001/api/approvals
+# Alert if > 1 second
+```
+
+**State Consistency**
+```bash
+# UI queue count vs API count (should match)
+UI_COUNT=$(curl -s http://localhost:3001 | grep -o "APPROVAL QUEUE ([0-9]*)")
+API_COUNT=$(curl -s http://localhost:3001/api/approvals | jq '[.[] | select(.status == "pending")] | length')
+[ "$UI_COUNT" != "$API_COUNT" ] && echo "ALERT: State mismatch"
+```
+
+### Set Up Alerts
+- API down for > 2 minutes → Page on-call
+- Error rate > 10/hour → Slack notification
+- Response time > 2 seconds → Warning log
+- State mismatch detected → Immediate alert
+
+---
+
+## 22. Security Checklist (Before Production)
+
+Every feature must pass:
+
+- [ ] **No hardcoded secrets** — No API keys, passwords, tokens in code
+- [ ] **Input validated** — All user input validated and sanitized
+- [ ] **XSS prevented** — No unsanitized HTML rendering
+- [ ] **CSRF protected** — Forms have tokens if needed
+- [ ] **Auth working** — Endpoints check permissions
+- [ ] **Secrets in .env** — Not in .env.example or git
+- [ ] **Error messages safe** — Don't leak system internals
+- [ ] **SQL injection safe** — Parameterized queries only
+- [ ] **Rate limiting** — Prevent brute force attacks
+- [ ] **Logging safe** — Don't log sensitive data
+- [ ] **HTTPS only** — In production
+- [ ] **CORS configured** — Don't allow all origins
+
+---
+
+## 23. Incident Response (When It Breaks in Production)
+
+### Step 1: Immediate (0-5 min)
+1. **Confirm the issue** — Is it really broken or flaky?
+2. **Assess impact** — How many users affected? Critical or minor?
+3. **Page on-call** — If critical, wake someone up
+4. **Start rolling back** — If > 2 min from diagnosis, rollback (don't debug in prod)
+
+### Step 2: Stabilize (5-15 min)
+1. **Get service working** — Either fix or rollback
+2. **Communicate status** — Slack: "API is down, rolling back to v1.2.2, ETA 5min"
+3. **Monitor recovery** — Watch error rate, response times drop
+
+### Step 3: Root Cause (15-60 min)
+1. **What changed?** — What commit broke it?
+2. **Why didn't tests catch it?** — Test gap?
+3. **Document findings** — Write it down
+4. **Create post-incident ticket** — Don't forget about it
+
+### Step 4: Prevention (Next Day)
+1. **Add test case** — For what broke
+2. **Update DEVELOPMENT.md** — If new pattern
+3. **Deploy fix** — New tests + fixed code
+4. **Document in Slack** — Incident summary
+
+---
+
+## 24. Documentation Standards (For Each Feature)
+
+Every feature needs:
+
+### 1. API Documentation
+```markdown
+## Auto-Approve Setting
+
+**Endpoint:** GET/POST /api/auto-approve
+
+**GET Response:**
+```json
+{
+  "global": true,
+  "agent-name": false
+}
+```
+
+**POST Request:**
+```json
+{
+  "agentId": "global",
+  "enabled": true
+}
+```
+
+**Error Cases:**
+- 500: Server error (check logs)
+```
+
+### 2. Feature Documentation
+- What does it do? (1-2 sentences)
+- How to use it? (step-by-step)
+- What are the limitations? (be honest)
+- When to use it? When NOT to use it?
+
+### 3. Architecture Decision Record (ADR)
+```markdown
+# Why We Chose Auto-Approve
+
+**Decision:** Implement auto-approve at bridge level, not UI level
+
+**Why:**
+- Reduces manual review for trusted agents
+- Bridge is source of truth for auto-approve setting
+
+**Tradeoff:**
+- Slower than UI-only approval (network latency)
+- But more reliable (bridge controls it)
+
+**Alternative Considered:**
+- UI-only auto-approve (simpler, but bridge wouldn't know)
+
+**Decision Date:** 2026-07-19
+```
+
+### 4. Testing Documentation
+- How to run tests? (`npm run test`)
+- What does each test cover?
+- What's not tested? (and why?)
+
+---
+
+## 25. Dependency Management (Keep Systems Healthy)
+
+### When to Update Dependencies
+
+- **Security fixes:** Immediate
+- **Bug fixes:** Next sprint
+- **Minor features:** Next sprint
+- **Major versions:** Plan ahead
+
+### How to Update Safely
+
+```bash
+# Check what's outdated
+npm outdated
+
+# Update minor versions only (no breaking changes)
+npm update
+
+# Test everything
+npm run build
+npm run test:e2e
+
+# If tests pass, commit
+git add package-lock.json
+git commit -m "Update dependencies"
+
+# If tests fail, investigate
+# Don't blindly bump versions
+```
+
+### Never Do This
+- Update dependencies before a release
+- Update and commit without testing
+- Update major versions (X.0.0) without reading changelog
+- Ignore security warnings
+
+---
+
+## 26. Documentation of Decisions (ADR Archive)
+
+Keep a `docs/adr/` directory with architectural decisions:
+
+```
+docs/adr/
+├── 001-use-xterm-for-terminals.md
+├── 002-bridge-manages-sessions.md
+├── 003-auto-approve-at-bridge-level.md
+└── 004-state-persists-in-localStorage.md
+```
+
+**Format:** Why we chose X, what problem it solves, tradeoffs, date decided.
+
+**Why:** New developers understand *why* code is structured this way, not just how it works.
+
+---
+
+## Summary
 
 > No feature is complete until you have verified in a single test session that:
 > 1. Backend API works (test with curl)
