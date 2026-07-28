@@ -24,7 +24,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { name, emoji = '🤖', model = 'sonnet', prompt = '', projectName, workDir = '' } = body;
+  const { name, emoji = '🤖', model = 'sonnet', engine = 'claude', prompt = '', projectName, workDir = '' } = body;
 
   if (!name?.trim()) {
     return NextResponse.json({ error: 'name required' }, { status: 400 });
@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
     name: name.trim(),
     emoji,
     model,
+    engine,
     projectId,
     projectName: projectName?.trim() || `${emoji} ${name.trim()}`,
     prompt: prompt.trim(),
