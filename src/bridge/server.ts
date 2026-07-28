@@ -226,8 +226,10 @@ async function handleSend(
       : message;
 
   if (engine === 'hermes') {
-    // Hermes: hermes chat -q "message" --session-id <id> [--resume <id>]
-    args.push('chat', '-q', finalMessage, '--session-id', agentId);
+    // Hermes: hermes chat -q "message" --session-id <id> [-m <model>]
+    // -q = single non-interactive query (exits after response).
+    args.push('chat', '-q', finalMessage.trim());
+    args.push('--session-id', agentId);
     if (session.config.model) {
       args.push('-m', session.config.model);
     }

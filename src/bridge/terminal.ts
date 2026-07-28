@@ -413,18 +413,22 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
         cwd = config?.workDir && fs.existsSync(config.workDir) ? config.workDir : os.homedir();
       }
       if (engine === 'hermes') {
-        agentArgs.push('chat', '--session-id', key);
+        // Hermes chat is interactive — launch with --continue to stay
+        // in the session after the initial prompt is processed.
+        // Use --quiet to suppress the welcome banner in the PTY.
+        agentArgs.push('chat', '--continue', '--quiet', '--session-id', key);
       } else {
         agentArgs.push('--session-id', key);
       }
       // Optional seed prompt (e.g. from a Jira ticket) so the agent starts on this task.
-      const prompt = url.searchParams.get('prompt');
-      if (prompt) {
-        const safe = prompt.replace(/"/g, "'").slice(0, 800).trim();
-        if (safe) agentArgs.push(safe);
+      const seedPrompt = url.searchParams.get('prompt');
+      if (seedPrompt) {
+        const safePrompt = seedPrompt.replace(/"/g, "'").slice(0, 800).trim();
+        if (safePrompt) agentArgs.push(safePrompt);
       }
-      if (!agentLabel) agentLabel = key.slice(0, 8);
     }
+
+    if (!agentLabel) agentLabel = key.slice(0, 8);
 
     // Diagnostic: exactly how this connection resolved (helps debug "Session not
     // found" on resume — did findSessionFile locate the file? which cwd/args?).
