@@ -110,11 +110,11 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
     return () => window.removeEventListener('keydown', onKey);
   }, [maximized]);
 
-  // Mark the terminal "ready" once the claude input UI has rendered (past trust
+  // Mark the terminal "ready" once the agent UI has rendered (past trust
   // + startup), so the "initializing" overlay can lift.
   const checkReady = () => {
     const rendered = containerRef.current?.querySelector('.xterm-rows')?.textContent || '';
-    if (/for agents|accept edits|auto mode on|\? for shortcuts|bypass permissions/i.test(rendered)) {
+    if (/for agents|accept edits|auto mode on|\? for shortcuts|bypass permissions|welcome to hermes|type your message|\/help for commands/i.test(rendered)) {
       setReady(true);
     }
   };
