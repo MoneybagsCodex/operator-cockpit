@@ -29,6 +29,10 @@ export async function POST(
   const workDir = config.workDir || os.homedir();
   const agentId = config.id || params.id;
   const agentName = config.name || agentId;
+  const engine = config.engine || 'claude';
+  const agentBinary = engine === 'hermes' ? 'hermes' : 'claude';
+  const sessionFlag = engine === 'hermes' ? '--session-id' : '--session-id';
+  const continueFlag = engine === 'hermes' ? '--continue' : '--continue';
 
   // Write a temp PS1 script — avoids all quoting/escaping issues when passing to Start-Process
   const scriptLines = [
@@ -37,11 +41,11 @@ export async function POST(
     `$env:OPERATOR_STATE_DIR = '${STATE_DIR.replace(/\\/g, '\\\\').replace(/'/g, "''")}'`,
     `Set-Location '${workDir.replace(/'/g, "''")}'`,
     `Write-Host ""`,
-    `Write-Host "  Operator Cockpit  -  Claude Code Session" -ForegroundColor Cyan`,
+    `Write-Host "  Operator Cockpit  -  ${engine === 'hermes' ? 'Hermes' : 'Claude Code'} Session" -ForegroundColor Cyan`,
     `Write-Host "  Agent : ${agentName}" -ForegroundColor White`,
     `Write-Host "  Dir   : ${workDir}" -ForegroundColor DarkGray`,
     `Write-Host ""`,
-    `claude --continue`,
+    `${agentBinary} ${continueFlag}`,
   ].join('\r\n');
 
   const scriptPath = path.join(os.tmpdir(), `cockpit-launch-${agentId}.ps1`);
