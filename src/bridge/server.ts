@@ -2,8 +2,8 @@
 /**
  * Operator Cockpit Bridge Server
  *
- * Manages `claude --print` subprocesses per agent so the dashboard can talk to
- * any number of Claude Code sessions from a single terminal tab.
+ * Manages agent subprocesses (Claude Code or Hermes) per agent so the dashboard
+ * can talk to any number of agent sessions from a single terminal tab.
  *
  * POST   /send              { agentId, message } → { ok, reply } | { ok: false, error }
  * GET    /health                                 → { ok, agents, sessions[] }
@@ -30,12 +30,31 @@ const STATE_DIR =
 const AGENT_CONFIGS_DIR = path.join(STATE_DIR, 'agent-configs');
 const SESSIONS_FILE = path.join(STATE_DIR, 'bridge-sessions.json');
 
+import os from 'os';
+
+type AgentEngine = 'claude' | 'hermes';
+
 interface AgentConfig {
   id: string;
   name: string;
+  engine?: AgentEngine;  // 'claude' | 'hermes' — defaults to 'claude'
   model?: string;
   prompt?: string;
   workDir?: string;
+}
+
+function resolveEngine(agentId: string, config: AgentConfig | null): AgentEngine {
+  return config?.engine === 'hermes' ? 'hermes' : 'claude';
+}
+
+function getAgentBinary(engine: AgentEngine): string {
+  return engine === 'hermes' ? 'hermes' : 'claude';
+}
+
+function getAgentDir(engine: AgentEngine): string {
+  return engine === 'hermes'
+    ? path.join(os.homedir(), '.hermes')
+    : path.join(os.homedir(), '.claude');
 }
 
 interface Session {
@@ -102,12 +121,15 @@ function loadConfig(agentId: string): AgentConfig | null {
 
 // ── Claude runner ─────────────────────────────────────────────────────────────
 
-function runClaude(args: string[], cwd: string): Promise<string> {
+/**
+ * Run an agent (Claude Code or Hermes) and return its standard output.
+ */
+function runAgent(engine: AgentEngine, args: string[], cwd: string): Promise<string> {
+  const bin = getAgentBinary(engine);
   return new Promise((resolve, reject) => {
-    const proc = spawn('claude', args, {
+    const proc = spawn(bin, args, {
       cwd,
       env: process.env,
-      // Windows requires shell:true to find PATH-installed executables
       shell: process.platform === 'win32',
     });
 
@@ -121,7 +143,7 @@ function runClaude(args: string[], cwd: string): Promise<string> {
     const timer = setTimeout(() => {
       if (!settled) {
         proc.kill();
-        reject(new Error('Timeout: claude did not respond within 5 minutes'));
+        reject(new Error(`Timeout: ${bin} did not respond within 5 minutes`));
       }
     }, 300_000);
 
@@ -129,13 +151,13 @@ function runClaude(args: string[], cwd: string): Promise<string> {
       settled = true;
       clearTimeout(timer);
       if (code === 0) resolve(stdout.trim());
-      else reject(new Error(stderr.trim() || `claude exited with code ${code}`));
+      else reject(new Error(stderr.trim() || `${bin} exited with code ${code}`));
     });
 
     proc.on('error', (err) => {
       settled = true;
       clearTimeout(timer);
-      reject(new Error(`Failed to spawn claude: ${(err as Error).message}. Is Claude Code installed and in PATH?`));
+      reject(new Error(`Failed to spawn ${bin}: ${(err as Error).message}. Is ${bin} installed and in PATH?`));
     });
   });
 }
@@ -191,33 +213,44 @@ async function handleSend(
     sessions.set(agentId, session);
   }
 
-  // --output-format json so we can capture the session id claude assigns and
-  // parse the reply text cleanly.
-  const args: string[] = ['--print', '--output-format', 'json'];
-
-  if (session.config.model) {
-    args.push('--model', session.config.model);
-  }
+  const engine = resolveEngine(agentId, session.config);
+  const args: string[] = [];
 
   // Resume THIS agent's own conversation by id (not directory-based --continue,
   // which collides with other conversations sharing the working directory).
   const isFirstMessage = !session.claudeSessionId;
-  if (session.claudeSessionId) {
-    args.push('--resume', session.claudeSessionId);
-  }
-
-  // On first message, prepend the system prompt so claude treats it as context
+  // On first message, prepend the system prompt so the agent treats it as context
   const finalMessage =
     isFirstMessage && session.config.prompt?.trim()
       ? `${session.config.prompt.trim()}\n\n${message}`
       : message;
 
-  args.push(finalMessage);
+  if (engine === 'hermes') {
+    // Hermes: hermes chat -q "message" --session-id <id> [--resume <id>]
+    args.push('chat', '-q', finalMessage, '--session-id', agentId);
+    if (session.config.model) {
+      args.push('-m', session.config.model);
+    }
+  } else {
+    // Claude Code: claude --print --output-format json [--model <m>] [--resume <sid>] [message]
+    args.push('--print', '--output-format', 'json');
+    if (session.config.model) {
+      args.push('--model', session.config.model);
+    }
+    if (session.claudeSessionId) {
+      args.push('--resume', session.claudeSessionId);
+    }
+    if (isFirstMessage && session.config.prompt?.trim()) {
+      args.push(`${session.config.prompt.trim()}\n\n${message}`);
+    } else {
+      args.push(finalMessage);
+    }
+  }
 
   writeHeartbeat(agentId, session.config, session.workDir, 'working');
 
   try {
-    const raw = await runClaude(args, session.workDir);
+    const raw = await runAgent(engine, args, session.workDir);
 
     // Parse the JSON envelope: { result: "<text>", session_id: "<id>", ... }
     let reply = raw;
@@ -292,7 +325,9 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // POST /resume  — continue an EXISTING claude session by its session id
+  // POST /resume  — continue an EXISTING session by its session id
+  // (Claude uses --resume with .jsonl files; Hermes stores sessions
+  // in ~/.hermes/state.db — we pass --resume to both for now)
   if (req.method === 'POST' && url === '/resume') {
     try {
       const body = await readBody(req);
@@ -305,7 +340,7 @@ const server = http.createServer(async (req, res) => {
       const cwd = workDir && fs.existsSync(workDir) ? workDir : process.cwd();
       console.log(`[${new Date().toISOString()}] ↻ resume ${sessionId}: ${message.slice(0, 80)}`);
       try {
-        const reply = await runClaude(['--resume', sessionId.trim(), '--print', message.trim()], cwd);
+        const reply = await runAgent('claude', ['--resume', sessionId.trim(), '--print', message.trim()], cwd);
         return jsonResponse(res, 200, { ok: true, reply });
       } catch (err) {
         return jsonResponse(res, 502, { ok: false, error: String(err) });

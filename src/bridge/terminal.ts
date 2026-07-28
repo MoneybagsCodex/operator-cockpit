@@ -1,14 +1,18 @@
 /**
- * Embedded terminal server — gives the cockpit real, interactive `claude`
+ * Embedded terminal server — gives the cockpit real, interactive agent
  * sessions in the browser (full slash commands, MCP, live streaming).
+ *
+ * Supports both Claude Code and Hermes as the backend agent engine.
+ * The engine is selected per-agent via `engine` in the agent config
+ * ('claude' or 'hermes', defaulting to 'claude').
  *
  * Attaches a WebSocket server at ws://127.0.0.1:<bridge>/terminal to the
  * existing bridge HTTP server. Each connection is bound to a stable session id
- * (`sid`). The underlying `claude` process runs in a pseudo-terminal (node-pty)
+ * (`sid`). The underlying agent process runs in a pseudo-terminal (node-pty)
  * and OUTLIVES the WebSocket: a dropped/refreshed connection re-attaches to the
  * same live agent and replays its scrollback, so no conversation context is
  * lost. If the bridge itself restarted (the pty is gone), we fall back to
- * `claude --resume <sid>` to reload the conversation from disk.
+ * resume the agent from its session store.
  *
  * Connect with query params:
  *   ?sid=<uuid>        — stable session id (client-generated; the linchpin)
@@ -19,8 +23,8 @@
  *
  * Behaviour by state (auto-detected, `mode` is only a hint):
  *   live pty for sid exists  → re-attach + replay buffer
- *   session file on disk      → `claude --resume <sid>`
- *   neither                   → `claude --session-id <sid> [prompt]` (fresh)
+ *   session file on disk      → resume agent from disk
+ *   neither                   → launch fresh agent session
  */
 import type { Server } from 'http';
 import type { IncomingMessage } from 'http';
@@ -35,6 +39,7 @@ import { isAutoApprovedForAgent, readApprovals, decideApproval } from '../lib/st
 interface AgentConfig {
   id: string;
   workDir?: string;
+  engine?: 'claude' | 'hermes';
 }
 
 /** A running agent, kept alive independently of any browser connection. */
@@ -57,7 +62,13 @@ interface Session {
 }
 
 const CLAUDE_PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
+const HERMES_STATE_DIR = path.join(os.homedir(), '.hermes');
 const CLAUDE_BIN_DIR = path.join(os.homedir(), '.local', 'bin');
+const HERMES_BIN = 'hermes';
+
+function getAgentBinary(engine: string): string {
+  return engine === 'hermes' ? HERMES_BIN : 'claude';
+}
 
 // Live agents, keyed by stable session id. Survives browser disconnects.
 const sessions = new Map<string, Session>();
@@ -93,11 +104,30 @@ function loadAgentConfig(stateDir: string, agentId: string): AgentConfig | null 
   }
 }
 
-function findSessionFile(sessionId: string): string | null {
+function getSessionDir(engine: string): string {
+  return engine === 'hermes' ? HERMES_STATE_DIR : CLAUDE_PROJECTS_DIR;
+}
+
+function findSessionFile(sessionId: string, engine: string): string | null {
+  const sessionDir = getSessionDir(engine);
   try {
-    for (const dir of fs.readdirSync(CLAUDE_PROJECTS_DIR)) {
-      const candidate = path.join(CLAUDE_PROJECTS_DIR, dir, `${sessionId}.jsonl`);
-      if (fs.existsSync(candidate)) return candidate;
+    // Hermes stores sessions in ~/.hermes/state.db (SQLite), but session
+    // files also land in subdirectories for conversation history.
+    // Claude stores .jsonl files under ~/.claude/projects/<project>/<id>.jsonl
+    if (engine === 'hermes') {
+      // Hermes session files can be under ~/.hermes/
+      for (const dir of fs.readdirSync(sessionDir)) {
+        const candidate = path.join(sessionDir, dir, `${sessionId}.jsonl`);
+        if (fs.existsSync(candidate)) return candidate;
+      }
+      // Also check for Hermes session DB metadata in state.db
+      const stateDb = path.join(sessionDir, 'state.db');
+      if (fs.existsSync(stateDb)) return `HERMES:${sessionId}`;
+    } else {
+      for (const dir of fs.readdirSync(sessionDir)) {
+        const candidate = path.join(sessionDir, dir, `${sessionId}.jsonl`);
+        if (fs.existsSync(candidate)) return candidate;
+      }
     }
   } catch { /* ignore */ }
 
@@ -342,46 +372,65 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
     }
 
     // 2) Not live — resume from disk if the conversation exists, else fresh launch.
-    const sessionFile = findSessionFile(key);
+    // Resolve engine from agent config — defaults to 'claude'.
+    const agentParamId = url.searchParams.get('agent') ?? '';
+    const config = agentParamId ? loadAgentConfig(stateDir, agentParamId) : null;
+    const engine = config?.engine === 'hermes' ? 'hermes' : 'claude';
+    const sessionFile = findSessionFile(key, engine);
     let cwd = os.homedir();
-    const claudeArgs: string[] = [];
+    const agentArgs: string[] = [];
     let agentLabel = url.searchParams.get('label') || '';
 
     if (sessionFile && sessionFile.startsWith('ACTIVE:')) {
       // Session is tracked as active but file doesn't exist yet — resume anyway
-      claudeArgs.push('--resume', key);
-      console.log(`[terminal] ◀ RESUME (tracked active): ${key}`);
+      if (engine === 'hermes') {
+        agentArgs.push('chat', '--resume', key);
+      } else {
+        agentArgs.push('--resume', key);
+      }
+      console.log(`[terminal] ◀ RESUME (tracked active): ${key} (${engine})`);
+    } else if (sessionFile && sessionFile.startsWith('HERMES:')) {
+      // Hermes session exists in state.db (no .jsonl file on disk)
+      agentArgs.push('chat', '--resume', key);
+      cwd = sessionCwd(sessionFile.replace('HERMES:', '')) ?? os.homedir();
+      console.log(`[terminal] ✓ RESUME Hermes session from disk: ${key}`);
     } else if (sessionFile) {
       cwd = sessionCwd(sessionFile) ?? os.homedir();
-      claudeArgs.push('--resume', key);
+      if (engine === 'hermes') {
+        agentArgs.push('chat', '--resume', key);
+      } else {
+        agentArgs.push('--resume', key);
+      }
       if (!agentLabel) agentLabel = key.slice(0, 8);
-      console.log(`[terminal] ✓ RESUME from disk: ${key} @ ${sessionFile}`);
+      console.log(`[terminal] ✓ RESUME from disk: ${key} @ ${sessionFile} (${engine})`);
     } else {
-      console.log(`[terminal] ✗ FRESH: ${key} (no session file found in ${CLAUDE_PROJECTS_DIR})`);
+      console.log(`[terminal] ✗ FRESH: ${key} (no session file found in ${getSessionDir(engine)})`);
       // Fresh — PIN the session id so this conversation can always be resumed later.
-      const agentId = url.searchParams.get('agent') ?? '';
       const explicitCwd = url.searchParams.get('cwd');
-      const config = agentId ? loadAgentConfig(stateDir, agentId) : null;
       if (explicitCwd && fs.existsSync(explicitCwd)) {
         cwd = explicitCwd; // launched from a project-folder button
       } else {
         cwd = config?.workDir && fs.existsSync(config.workDir) ? config.workDir : os.homedir();
       }
-      claudeArgs.push('--session-id', key);
-      // Optional seed prompt (e.g. from a Jira ticket) so claude starts on this task.
+      if (engine === 'hermes') {
+        agentArgs.push('chat', '--session-id', key);
+      } else {
+        agentArgs.push('--session-id', key);
+      }
+      // Optional seed prompt (e.g. from a Jira ticket) so the agent starts on this task.
       const prompt = url.searchParams.get('prompt');
       if (prompt) {
         const safe = prompt.replace(/"/g, "'").slice(0, 800).trim();
-        if (safe) claudeArgs.push(safe);
+        if (safe) agentArgs.push(safe);
       }
-      if (!agentLabel) agentLabel = agentId || 'Cockpit agent';
+      if (!agentLabel) agentLabel = key.slice(0, 8);
     }
 
     // Diagnostic: exactly how this connection resolved (helps debug "Session not
     // found" on resume — did findSessionFile locate the file? which cwd/args?).
     console.log(
       `[terminal] resolve ${key}: sessionFile=${sessionFile ?? 'NONE'} ` +
-      `→ ${sessionFile ? 'RESUME' : 'FRESH'} cwd=${cwd} args=${JSON.stringify(claudeArgs)} ` +
+      `→ ${sessionFile ? 'RESUME' : 'FRESH'} cwd=${cwd} args=${JSON.stringify(agentArgs)} ` +
       `homedir=${os.homedir()} projectsDir=${CLAUDE_PROJECTS_DIR}`
     );
     console.log(
@@ -390,14 +439,15 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
       `cols=${cols} rows=${rows}`
     );
 
-    // Spawn claude inside cmd.exe so PATH/.cmd resolution works on Windows.
+    // Spawn the agent binary inside cmd.exe so PATH/.cmd resolution works on Windows.
     const isWin = process.platform === 'win32';
-    const file = isWin ? 'cmd.exe' : 'claude';
-    const args = isWin ? ['/c', 'claude', ...claudeArgs] : claudeArgs;
+    const bin = getAgentBinary(engine);
+    const file = isWin ? 'cmd.exe' : bin;
+    const shellArgs = isWin ? ['/c', bin, ...agentArgs] : agentArgs;
 
     let term: pty.IPty;
     try {
-      term = pty.spawn(file, args, {
+      term = pty.spawn(file, shellArgs, {
         name: 'xterm-256color',
         cols,
         rows,

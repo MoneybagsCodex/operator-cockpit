@@ -42,7 +42,7 @@ function Brand() {
 export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTerminal, onOpenProject, onTrustAll }: AgentStatusBarProps) {
   const [mounted, setMounted] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', emoji: '🤖', model: 'sonnet', prompt: '', workDir: '' });
+  const [form, setForm] = useState({ name: '', emoji: '🤖', model: 'sonnet', engine: 'claude' as const, prompt: '', workDir: '' });
   const [creating, setCreating] = useState(false);
   const [configs, setConfigs] = useState<AgentConfig[]>([]);
   const [projects, setProjects] = useState<ProjectDir[]>([]);
@@ -147,7 +147,7 @@ export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTermi
         const agentId = data.config.id;
         const agentName = data.config.name;
         console.log('[AgentStatusBar] Agent created successfully:', agentId, agentName);
-        setForm({ name: '', emoji: '🤖', model: 'sonnet', prompt: '', workDir: '' });
+        setForm({ name: '', emoji: '🤖', model: 'sonnet', engine: 'claude', prompt: '', workDir: '' });
         setShowForm(false);
         fetchConfigs();
         // Launch the agent terminal immediately after creation
@@ -283,6 +283,14 @@ export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTermi
               className="w-40 bg-slate-700 text-slate-100 px-3 py-1.5 text-sm rounded focus:outline-none focus:ring-1 focus:ring-blue-600 placeholder-slate-500"
             />
           </div>
+          <select
+            value={form.engine}
+            onChange={(e) => setForm((f) => ({ ...f, engine: e.target.value as typeof f.engine }))}
+            className="bg-slate-700 text-slate-100 px-2 py-1.5 text-sm rounded focus:outline-none focus:ring-1 focus:ring-blue-600"
+          >
+            <option value="claude">Claude Code</option>
+            <option value="hermes">Hermes</option>
+          </select>
           <select
             value={form.model}
             onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}

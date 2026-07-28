@@ -27,7 +27,7 @@ npm run test:e2e
 
 ## Bridge vs Dev Server
 
-- **Bridge** (port 3002) — manages terminal sessions, spawns Claude processes
+- **Bridge** (port 3002) — manages terminal sessions, spawns agent processes (Claude or Hermes)
 - **Dev** (port 3000) — serves web UI, handles API routes
 - Both must run for cockpit to function: `npm run bridge &` then `npm run dev`
 
