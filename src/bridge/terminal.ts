@@ -108,21 +108,127 @@ function getSessionDir(engine: string): string {
   return engine === 'hermes' ? HERMES_STATE_DIR : CLAUDE_PROJECTS_DIR;
 }
 
-function findSessionFile(sessionId: string, engine: string): string | null {
+// ---------------------------------------------------------------------------
+// Hermes session store
+//
+// Unlike claude, hermes will NOT accept a caller-supplied session id — `hermes
+// chat` has no --session-id flag and mints its own ids (`YYYYMMDD_HHMMSS_hex`).
+// So the cockpit's sid can never BE the hermes session id; we record a mapping
+// (cockpit sid → hermes id) after a fresh launch and resume through that.
+// ---------------------------------------------------------------------------
+
+const HERMES_STATE_DB = path.join(HERMES_STATE_DIR, 'state.db');
+
+/** Run a read-only query against hermes' SQLite store. Returns [] on any failure. */
+function hermesQuery(sql: string, ...params: unknown[]): Record<string, unknown>[] {
+  if (!fs.existsSync(HERMES_STATE_DB)) return [];
+  let db: { prepare: (s: string) => { all: (...a: unknown[]) => unknown[] }; close: () => void } | null = null;
+  try {
+    // Lazily required: node:sqlite only exists on Node >= 22.5.
+    const { DatabaseSync } = require('node:sqlite');
+    db = new DatabaseSync(HERMES_STATE_DB, { readOnly: true });
+    return db!.prepare(sql).all(...params) as Record<string, unknown>[];
+  } catch {
+    return [];
+  } finally {
+    try { db?.close(); } catch { /* ignore */ }
+  }
+}
+
+/** True only if this id is a real row in hermes' session table. */
+function hermesSessionExists(sessionId: string): boolean {
+  return hermesQuery('SELECT id FROM sessions WHERE id = ? LIMIT 1', sessionId).length > 0;
+}
+
+/** Every known hermes session id — used to diff before/after a fresh spawn. */
+function hermesSessionIds(): Set<string> {
+  return new Set(hermesQuery('SELECT id FROM sessions').map((r) => String(r.id)));
+}
+
+/** Newest hermes session started after `since` (epoch seconds) and not already known. */
+function hermesNewestSessionSince(since: number, exclude: Set<string>): string | null {
+  const rows = hermesQuery(
+    'SELECT id FROM sessions WHERE started_at >= ? ORDER BY started_at DESC LIMIT 25',
+    since
+  );
+  for (const r of rows) {
+    const id = String(r.id);
+    if (!exclude.has(id)) return id;
+  }
+  return null;
+}
+
+/** cockpit sid → hermes session id, persisted so resume survives a bridge restart. */
+function hermesMapPath(stateDir: string): string {
+  return path.join(stateDir, 'hermes-sessions.json');
+}
+
+function readHermesMap(stateDir: string): Record<string, string> {
+  try {
+    return JSON.parse(fs.readFileSync(hermesMapPath(stateDir), 'utf-8')) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+function recordHermesId(stateDir: string, key: string, hermesId: string): void {
+  try {
+    const map = readHermesMap(stateDir);
+    if (map[key] === hermesId) return;
+    map[key] = hermesId;
+    fs.mkdirSync(stateDir, { recursive: true });
+    fs.writeFileSync(hermesMapPath(stateDir), JSON.stringify(map, null, 2));
+    console.log(`[terminal] hermes map: ${key} → ${hermesId}`);
+  } catch (err) {
+    console.log(`[terminal] hermes map write failed: ${String(err)}`);
+  }
+}
+
+/**
+ * After a fresh `hermes chat`, watch the store for the session it creates and
+ * record the mapping so this panel can be resumed later.
+ *
+ * Hermes doesn't write the row at boot — it lands on the FIRST user turn, which
+ * may be minutes away (or never, if the panel is closed unused). So poll for as
+ * long as the pty lives rather than over a fixed window, and stop on first hit.
+ * Returns a cleanup fn so the caller can cancel it when the session exits.
+ */
+function captureHermesSessionId(
+  stateDir: string,
+  key: string,
+  before: Set<string>,
+  startedAt: number,
+  isAlive: () => boolean
+): () => void {
+  const iv = setInterval(() => {
+    if (!isAlive()) { clearInterval(iv); return; }
+    const found = hermesNewestSessionSince(startedAt, before);
+    if (found) {
+      recordHermesId(stateDir, key, found);
+      clearInterval(iv);
+    }
+  }, 3000);
+  if (typeof iv.unref === 'function') iv.unref();
+  return () => clearInterval(iv);
+}
+
+function findSessionFile(sessionId: string, engine: string, stateDir?: string): string | null {
   const sessionDir = getSessionDir(engine);
   try {
     // Hermes stores sessions in ~/.hermes/state.db (SQLite), but session
     // files also land in subdirectories for conversation history.
     // Claude stores .jsonl files under ~/.claude/projects/<project>/<id>.jsonl
     if (engine === 'hermes') {
-      // Hermes session files can be under ~/.hermes/
-      for (const dir of fs.readdirSync(sessionDir)) {
-        const candidate = path.join(sessionDir, dir, `${sessionId}.jsonl`);
-        if (fs.existsSync(candidate)) return candidate;
-      }
-      // Also check for Hermes session DB metadata in state.db
-      const stateDb = path.join(sessionDir, 'state.db');
-      if (fs.existsSync(stateDb)) return `HERMES:${sessionId}`;
+      // A hermes session lives in state.db, never as a .jsonl on disk, and its
+      // id is hermes-generated — so resolve through the cockpit's sid→id map and
+      // only claim RESUME when that id is REALLY in the store. (Previously this
+      // returned HERMES:<sid> whenever state.db merely existed, so every fresh
+      // panel resumed a nonexistent id → "Session not found: <uuid>".)
+      const mapped = stateDir ? readHermesMap(stateDir)[sessionId] : undefined;
+      if (mapped && hermesSessionExists(mapped)) return `HERMES:${mapped}`;
+      // Tolerate a sid that already IS a hermes id (hand-entered / legacy).
+      if (hermesSessionExists(sessionId)) return `HERMES:${sessionId}`;
+      return null;
     } else {
       for (const dir of fs.readdirSync(sessionDir)) {
         const candidate = path.join(sessionDir, dir, `${sessionId}.jsonl`);
@@ -376,31 +482,30 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
     const agentParamId = url.searchParams.get('agent') ?? '';
     const config = agentParamId ? loadAgentConfig(stateDir, agentParamId) : null;
     const engine = config?.engine === 'hermes' ? 'hermes' : 'claude';
-    const sessionFile = findSessionFile(key, engine);
+    const sessionFile = findSessionFile(key, engine, stateDir);
     let cwd = os.homedir();
     const agentArgs: string[] = [];
     let agentLabel = url.searchParams.get('label') || '';
+    let hermesFresh = false; // fresh hermes launch → capture its generated id after spawn
+    let hermesSeed = '';     // seed prompt to type into hermes once it's up
 
     if (sessionFile && sessionFile.startsWith('ACTIVE:')) {
-      // Session is tracked as active but file doesn't exist yet — resume anyway
-      if (engine === 'hermes') {
-        agentArgs.push('chat', '--resume', key);
-      } else {
-        agentArgs.push('--resume', key);
-      }
+      // Session is tracked as active but file doesn't exist yet — resume anyway.
+      // (hermes never reaches here: findSessionFile returns null unless the id is
+      // really in state.db, since hermes rejects an unknown --resume id.)
+      agentArgs.push('--resume', key);
       console.log(`[terminal] ◀ RESUME (tracked active): ${key} (${engine})`);
     } else if (sessionFile && sessionFile.startsWith('HERMES:')) {
-      // Hermes session exists in state.db (no .jsonl file on disk)
-      agentArgs.push('chat', '--resume', key);
-      cwd = sessionCwd(sessionFile.replace('HERMES:', '')) ?? os.homedir();
-      console.log(`[terminal] ✓ RESUME Hermes session from disk: ${key}`);
+      // Verified present in state.db. Resume by the HERMES id, not the cockpit
+      // sid — they are different namespaces. Hermes restores its own recorded
+      // cwd, so don't try to derive one (sessionCwd expects a .jsonl path).
+      const hermesId = sessionFile.replace('HERMES:', '');
+      agentArgs.push('chat', '--resume', hermesId);
+      console.log(`[terminal] ✓ RESUME Hermes session ${hermesId} (sid ${key})`);
     } else if (sessionFile) {
+      // .jsonl on disk — claude only (hermes resolves to HERMES:/null above).
       cwd = sessionCwd(sessionFile) ?? os.homedir();
-      if (engine === 'hermes') {
-        agentArgs.push('chat', '--resume', key);
-      } else {
-        agentArgs.push('--resume', key);
-      }
+      agentArgs.push('--resume', key);
       if (!agentLabel) agentLabel = key.slice(0, 8);
       console.log(`[terminal] ✓ RESUME from disk: ${key} @ ${sessionFile} (${engine})`);
     } else {
@@ -412,18 +517,22 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
       } else {
         cwd = config?.workDir && fs.existsSync(config.workDir) ? config.workDir : os.homedir();
       }
-      if (engine === 'hermes') {
-        // Hermes chat is interactive — launch with --continue to stay
-        // in the session after the initial prompt is processed.
-        // Use --quiet to suppress the welcome banner in the PTY.
-        agentArgs.push('chat', '--continue', '--quiet', '--session-id', key);
-      } else {
-        agentArgs.push('--session-id', key);
-      }
-      // Optional seed prompt (e.g. from a Jira ticket) so the agent starts on this task.
       const seedPrompt = url.searchParams.get('prompt');
-      if (seedPrompt) {
-        const safePrompt = seedPrompt.replace(/"/g, "'").slice(0, 800).trim();
+      const safePrompt = seedPrompt ? seedPrompt.replace(/"/g, "'").slice(0, 800).trim() : '';
+      if (engine === 'hermes') {
+        // `hermes chat` has NO --session-id (it mints its own id), and a bare
+        // --continue resumes the most recent session — which would silently
+        // hijack an unrelated conversation. Launch clean and capture the id it
+        // creates (see captureHermesSessionId) so resume works later.
+        // The seed prompt is typed into the pty after boot; hermes chat takes no
+        // positional query (that's -q, which exits after one turn).
+        agentArgs.push('chat');
+        hermesFresh = true;
+        hermesSeed = safePrompt;
+      } else {
+        // Fresh — PIN the session id so this conversation can always be resumed.
+        agentArgs.push('--session-id', key);
+        // Optional seed prompt (e.g. from a Jira ticket) so the agent starts on this task.
         if (safePrompt) agentArgs.push(safePrompt);
       }
     }
@@ -448,6 +557,11 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
     const bin = getAgentBinary(engine);
     const file = isWin ? 'cmd.exe' : bin;
     const shellArgs = isWin ? ['/c', bin, ...agentArgs] : agentArgs;
+
+    // Snapshot hermes' existing sessions BEFORE spawning so we can tell which
+    // row the new run creates (it picks its own id — we can't supply one).
+    const hermesBefore = hermesFresh ? hermesSessionIds() : new Set<string>();
+    const hermesSpawnedAt = Date.now() / 1000;
 
     let term: pty.IPty;
     try {
@@ -487,6 +601,23 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
     // Set up approval bridge so auto-approve works for this session
     setupApprovalBridge(session);
 
+    let stopHermesCapture: (() => void) | null = null;
+    if (hermesFresh) {
+      // Learn the id hermes mints on its first turn, so this panel can resume later.
+      stopHermesCapture = captureHermesSessionId(
+        stateDir, key, hermesBefore, hermesSpawnedAt,
+        () => sessions.get(key) === session
+      );
+      // Deliver the seed prompt as typed input once the REPL is accepting it.
+      if (hermesSeed) {
+        setTimeout(() => {
+          if (sessions.get(key) === session) {
+            try { term.write(`${hermesSeed}\r`); } catch { /* pty gone */ }
+          }
+        }, 4000);
+      }
+    }
+
     // Wire the pty ONCE. It pushes to whatever browser is currently attached and
     // keeps a rolling buffer for replay after a reconnect.
     term.onData((data: string) => {
@@ -513,6 +644,7 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
       }
       if (session.detachTimer) clearTimeout(session.detachTimer);
       cleanupApprovalBridge(session);
+      stopHermesCapture?.();
       sessions.delete(key);
       console.log(`[terminal] exited ${key} (exit ${exitCode})`);
     });
