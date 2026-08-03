@@ -240,6 +240,12 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
     const el = containerRef.current;
     if (!el) return;
 
+    // Per-generation liveness. StrictMode mounts → cleanup → mounts again; every
+    // handler below checks this so a torn-down generation can never write to a
+    // disposed terminal or resurrect a socket. This is what makes disposing safe.
+    let alive = true;
+    let localWs: WebSocket | null = null;
+
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 12,
@@ -300,6 +306,7 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
 
     function connect() {
       const sid = extractSessionId(wsUrl);
+      if (!alive) return;
       if (gen !== currentGenRef.current) {
         console.log(`[TerminalPanel] connect() called but gen=${gen} !== current=${currentGenRef.current}, skipping (sid=${sid})`);
         return;
@@ -319,8 +326,10 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
       const ws = new WebSocket(fullUrl);
       ws.binaryType = 'arraybuffer';
       wsRef.current = ws;
+      localWs = ws;
 
       ws.onopen = () => {
+        if (!alive) { try { ws.close(); } catch { /* ignore */ } return; }
         setReconnecting(false);
         setStalled(false);
         if (reconnectTimer.current) { clearTimeout(reconnectTimer.current); reconnectTimer.current = null; }
@@ -333,6 +342,7 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
         term.focus();
       };
       ws.onmessage = (e) => {
+        if (!alive) return; // torn-down generation — never write to a disposed term
         const chunk = typeof e.data === 'string' ? e.data : new TextDecoder().decode(e.data as ArrayBuffer);
         term.write(chunk);
         outputBuf.current = (outputBuf.current + chunk).slice(-6000);
@@ -356,8 +366,8 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
       ws.onclose = () => {
         console.log(`[TerminalPanel] WS onclose fired for ${extractSessionId(wsUrl)} (gen=${gen})`);
         if (stableTimerRef.current) { clearTimeout(stableTimerRef.current); stableTimerRef.current = null; }
-        if (gen !== currentGenRef.current || closedByUser.current) {
-          console.log(`[TerminalPanel] Suppressing reconnect: gen=${gen} current=${currentGenRef.current} closedByUser=${closedByUser.current}`);
+        if (!alive || gen !== currentGenRef.current || closedByUser.current) {
+          console.log(`[TerminalPanel] Suppressing reconnect: alive=${alive} gen=${gen} current=${currentGenRef.current} closedByUser=${closedByUser.current}`);
           return;
         }
         const recent = outputBuf.current;
@@ -417,11 +427,20 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
       ta?.removeEventListener('focus', onFocus);
       ta?.removeEventListener('blur', onBlur);
       if (respTimer.current) clearTimeout(respTimer.current);
-      // NOTE: Don't close WebSocket here. The generation system ensures old closures are inert.
-      // Let the bridge's grace period handle cleanup after the session detaches.
-      // CRITICAL: Don't dispose terminal on unmount. React StrictMode double-mounts destroy then recreate,
-      // losing DOM and causing data to be written to disposed terminals. Let terminal persist across remounts.
-      // term.dispose();
+      // Retire this generation *before* tearing anything down, so the socket's
+      // onclose/onmessage become no-ops instead of scheduling a reconnect.
+      alive = false;
+      // Close this generation's socket. Leaving it open made the next mount's
+      // connect() reuse it (see the readyState guard above), which bound input to
+      // one Terminal while the user saw and typed into another.
+      if (localWs) {
+        try { localWs.close(); } catch { /* ignore */ }
+        if (wsRef.current === localWs) wsRef.current = null;
+      }
+      // The bridge keeps the pty alive for its grace window, so the next mount
+      // re-attaches on the same sid and replays scrollback — no lost context.
+      try { term.dispose(); } catch { /* already gone */ }
+      el.replaceChildren(); // drop the xterm DOM so the remount doesn't stack a second one
     };
   }, [wsUrl]);
 
