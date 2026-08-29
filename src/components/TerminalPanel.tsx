@@ -122,28 +122,52 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
   // Accept the claude startup trust prompt — but only when it's actually on
   // screen. Called on every output chunk and when "Trust all" is pressed, so it
   // fires exactly when the prompt appears regardless of WS/render timing.
+  //
+  // The prompt is an ARROW-SELECT menu (no numbered options), and it defaults to
+  // "No, exit". Typing "1" — which the old numbered menu accepted — is now a
+  // no-op, so the follow-up Enter confirmed the default and killed the agent on
+  // launch (exit 1). Navigate to the "Yes" row and confirm that instead.
   const acceptTrustIfPrompt = () => {
     const ws = wsRef.current;
     if (!wantTrust.current || !ws || ws.readyState !== WebSocket.OPEN) return;
-    // Read the RENDERED terminal text (xterm strips ANSI for us) — far more
-    // reliable than matching the raw PTY stream.
-    const rendered = containerRef.current?.querySelector('.xterm-rows')?.textContent || '';
-    if (!/trust this folder|Yes, I trust|one you trust|do you trust/i.test(rendered)) return;
+    // Read the RENDERED rows (xterm strips ANSI for us) — far more reliable than
+    // matching the raw PTY stream. Row-by-row, so we can locate the selection.
+    const rowsEl = containerRef.current?.querySelector('.xterm-rows');
+    if (!rowsEl) return;
+    const rows = Array.from(rowsEl.children).map((r) => r.textContent || '');
+    if (!rows.some((r) => /trust this folder|Yes, I trust|one you trust|do you trust/i.test(r))) return;
+
+    // Locate the "Yes" option and the row the cursor (❯) currently sits on.
+    const yesIdx = rows.findIndex((r) => /Yes,\s*I trust/i.test(r));
+    const selIdx = rows.findIndex((r) => /❯/.test(r) && /Yes,\s*I trust|No,\s*exit/i.test(r));
+    // If the menu isn't identifiable, do NOTHING. Sending a blind Enter here is
+    // exactly what dismissed the prompt as "No, exit".
+    if (yesIdx < 0 || selIdx < 0) return;
+
     wantTrust.current = false; // accept once
-    ws.send(JSON.stringify({ type: 'input', data: '1' }));
+    const delta = yesIdx - selIdx;
+    const arrow = delta > 0 ? '\x1b[B' : '\x1b[A'; // down / up
+    const keys = arrow.repeat(Math.abs(delta));
+    if (keys) ws.send(JSON.stringify({ type: 'input', data: keys }));
     setTimeout(() => {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'input', data: '\r' }));
     }, 120);
   };
 
   // Auto-accept the trust prompt on boot ("pre-trust") — arm on mount and poll
-  // for up to ~15s while claude starts up and renders the prompt. The manual
-  // "Trust all" button below re-triggers this for anything that didn't catch.
+  // while claude starts up and renders the prompt. The manual "Trust all" button
+  // below re-triggers this for anything that didn't catch.
+  //
+  // Window is 90s, not 15s: a cold claude start (config warnings, plugin load)
+  // can render the trust menu well past 15s, and when the window closed early the
+  // prompt just sat there unanswered until the user clicked "Trust all".
+  // Waiting longer is safe — acceptTrustIfPrompt() no-ops unless the menu is
+  // actually on screen, and it stops itself on the first accept.
   useEffect(() => {
     wantTrust.current = true;
     acceptTrustIfPrompt();
     const iv = setInterval(() => { acceptTrustIfPrompt(); if (!wantTrust.current) clearInterval(iv); }, 500);
-    const clear = setTimeout(() => { wantTrust.current = false; clearInterval(iv); }, 15000);
+    const clear = setTimeout(() => { wantTrust.current = false; clearInterval(iv); }, 90000);
     return () => { clearInterval(iv); clearTimeout(clear); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
