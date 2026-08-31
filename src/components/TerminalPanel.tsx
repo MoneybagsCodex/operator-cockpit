@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { X, TerminalSquare, Pencil, Check, Maximize2, Minimize2, RefreshCw, Loader2, GitBranch } from 'lucide-react';
+import { X, TerminalSquare, Pencil, Check, ChevronsLeftRight, RefreshCw, Loader2, GitBranch } from 'lucide-react';
 import { SessionMetrics } from './SessionMetrics';
 
 interface TerminalPanelProps {
@@ -546,13 +546,40 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
             >
               {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
             </button>
+            {/* Full-screen toggle: <> to expand, X to come back.
+                While full-screen this is the ONLY way back (besides Esc), so it
+                gets button styling + contrast — as a faint 14px glyph it read as
+                the close button and users couldn't find how to un-expand. */}
             <button
-              onClick={onClose}
-              className="text-slate-500 hover:text-slate-300 transition-colors"
-              title="Close terminal (ends the session)"
+              onClick={() => setMaximized((m) => !m)}
+              className={maximized
+                ? 'flex items-center gap-1 rounded bg-slate-700 px-2 py-1 text-slate-100 hover:bg-slate-600 transition-colors'
+                : 'text-slate-500 hover:text-cyan-400 transition-colors'}
+              title={maximized ? 'Exit full screen (Esc)' : 'Expand to full screen'}
+              aria-label={maximized ? 'Exit full screen' : 'Expand to full screen'}
+              aria-pressed={maximized}
             >
-              <X className="w-4 h-4" />
+              {maximized ? (
+                <>
+                  <X className="w-4 h-4" />
+                  <span className="text-[11px] font-medium leading-none">Exit full screen</span>
+                </>
+              ) : (
+                <ChevronsLeftRight className="w-3.5 h-3.5" />
+              )}
             </button>
+            {/* Hidden while full-screen: this X ENDS THE SESSION, and sitting it
+                next to the identical exit-full-screen X invites a misclick that
+                kills the agent. Collapse first to reach it. */}
+            {!maximized && (
+              <button
+                onClick={onClose}
+                className="text-slate-500 hover:text-red-400 transition-colors"
+                title="Close terminal (ends the session)"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
         {/* Metrics row */}
