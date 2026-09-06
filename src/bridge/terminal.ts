@@ -250,17 +250,20 @@ function findSessionFile(sessionId: string, engine: string, stateDir?: string): 
     }
   } catch { /* ignore */ }
 
-  // Check if this is an active session tracked by the cockpit
-  // (might exist in memory but not yet written to disk)
-  try {
-    const activeSessions = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.operator-state', 'active-sessions.json'), 'utf-8'));
-    const isActive = activeSessions.some((s: any) => s.sid === sessionId);
-    if (isActive) {
-      console.log(`[terminal] Session ${sessionId} is tracked as active (file may not exist yet)`);
-      return `ACTIVE:${sessionId}`; // Special marker for active sessions
-    }
-  } catch { /* no active sessions file */ }
-
+  // NOTE: there used to be an "ACTIVE:" fallback here — if active-sessions.json
+  // listed this sid, we returned a marker and spawned `claude --resume <sid>`
+  // on the assumption the transcript just hadn't been flushed yet.
+  //
+  // That is unsafe. A live session never reaches this function (it re-attaches
+  // to the in-memory pty first), so by the time we get here the process is gone
+  // and the ONLY way to resume is the on-disk transcript checked above. If that
+  // file doesn't exist, `--resume` makes claude exit 1 with "No conversation
+  // found" and the panel dies on arrival. active-sessions.json currently lists
+  // 54 sids of which 53 have no transcript, so this fired constantly.
+  //
+  // Falling through to null launches fresh with the sid pinned via --session-id,
+  // which is recoverable: you lose nothing that was ever persisted, and the new
+  // conversation IS resumable afterwards.
   return null;
 }
 
@@ -287,6 +290,30 @@ function ptyEnv(extra?: Record<string, string>): NodeJS.ProcessEnv {
   env.PATH = [...pathExtra, process.env.PATH ?? ''].filter(Boolean).join(path.delimiter);
   // Route this terminal's risky actions through the cockpit approval gate.
   env.COCKPIT_APPROVAL_BRIDGE = '1';
+
+  // --- Transcript persistence -------------------------------------------
+  // If the bridge was started from inside a Claude Code session (e.g. launched
+  // from an agent's shell rather than a plain terminal), process.env carries
+  // that session's markers. Spreading process.env above hands them to every
+  // agent we spawn, so claude treats each one as a nested child session and
+  // DISABLES transcript saving:
+  //
+  //   "Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker"
+  //
+  // No transcript means no ~/.claude/projects/<proj>/<sid>.jsonl, which means
+  // findSessionFile() can't resume the conversation — the panel comes back
+  // empty and the history is gone. Left unchecked this silently affected every
+  // agent (53 of 54 tracked sessions had no transcript on disk).
+  //
+  // Strip the inherited markers so a spawned agent is always a top-level
+  // session, and set the documented override as a backstop in case claude
+  // infers "child" from something else.
+  delete env.CLAUDE_CODE_CHILD_SESSION;
+  delete env.CLAUDE_CODE_SESSION_ID;
+  delete env.CLAUDE_CODE_ENTRYPOINT;
+  delete env.CLAUDE_CODE_EXECPATH;
+  delete env.CLAUDE_PID;
+  env.CLAUDE_CODE_FORCE_SESSION_PERSISTENCE = '1';
   // Force HOME/USERPROFILE to the real Windows home. If the bridge was launched
   // from Git Bash, HOME is a POSIX path ("/c/Users/…") that the spawned `claude`
   // can't resolve → it looks for ~/.claude/projects in the wrong place and reports
@@ -502,13 +529,7 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
     let hermesFresh = false; // fresh hermes launch → capture its generated id after spawn
     let hermesSeed = '';     // seed prompt to type into hermes once it's up
 
-    if (sessionFile && sessionFile.startsWith('ACTIVE:')) {
-      // Session is tracked as active but file doesn't exist yet — resume anyway.
-      // (hermes never reaches here: findSessionFile returns null unless the id is
-      // really in state.db, since hermes rejects an unknown --resume id.)
-      agentArgs.push('--resume', key);
-      console.log(`[terminal] ◀ RESUME (tracked active): ${key} (${engine})`);
-    } else if (sessionFile && sessionFile.startsWith('HERMES:')) {
+    if (sessionFile && sessionFile.startsWith('HERMES:')) {
       // Verified present in state.db. Resume by the HERMES id, not the cockpit
       // sid — they are different namespaces. Hermes restores its own recorded
       // cwd, so don't try to derive one (sessionCwd expects a .jsonl path).
