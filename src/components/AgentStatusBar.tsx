@@ -42,7 +42,7 @@ function Brand() {
 export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTerminal, onOpenProject, onTrustAll }: AgentStatusBarProps) {
   const [mounted, setMounted] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', emoji: '🤖', model: 'sonnet', engine: 'claude' as const, prompt: '', workDir: '' });
+  const [form, setForm] = useState({ name: '', emoji: '🤖', model: 'sonnet', engine: 'claude' as const, prompt: '', workDir: '', permissionMode: 'auto' });
   const [creating, setCreating] = useState(false);
   const [configs, setConfigs] = useState<AgentConfig[]>([]);
   const [projects, setProjects] = useState<ProjectDir[]>([]);
@@ -147,7 +147,7 @@ export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTermi
         const agentId = data.config.id;
         const agentName = data.config.name;
         console.log('[AgentStatusBar] Agent created successfully:', agentId, agentName);
-        setForm({ name: '', emoji: '🤖', model: 'sonnet', engine: 'claude', prompt: '', workDir: '' });
+        setForm({ name: '', emoji: '🤖', model: 'sonnet', engine: 'claude', prompt: '', workDir: '', permissionMode: 'auto' });
         setShowForm(false);
         fetchConfigs();
         // Launch the agent terminal immediately after creation
@@ -299,6 +299,18 @@ export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTermi
             <option value="sonnet">Claude Sonnet</option>
             <option value="opus">Claude Opus</option>
             <option value="haiku">Claude Haiku</option>
+          </select>
+          <select
+            value={form.permissionMode}
+            onChange={(e) => setForm((f) => ({ ...f, permissionMode: e.target.value }))}
+            title="How much this agent asks before acting. Bypass all removes every guard — it needs a working directory and should never run against your home folder."
+            className="bg-slate-700 text-slate-100 px-2 py-1.5 text-sm rounded focus:outline-none focus:ring-1 focus:ring-blue-600"
+          >
+            <option value="auto">Auto (recommended)</option>
+            <option value="acceptEdits">Accept edits</option>
+            <option value="manual">Ask every time</option>
+            <option value="plan">Plan only</option>
+            <option value="bypassPermissions">⚠ Bypass all</option>
           </select>
           {jiraTickets.length > 0 && (
             <select

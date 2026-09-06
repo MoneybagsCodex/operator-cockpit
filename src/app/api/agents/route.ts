@@ -24,7 +24,22 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { name, emoji = '🤖', model = 'sonnet', engine = 'claude', prompt = '', projectName, workDir = '' } = body;
+  const {
+    name, emoji = '🤖', model = 'sonnet', engine = 'claude', prompt = '',
+    projectName, workDir = '', permissionMode = 'auto',
+  } = body;
+
+  // Guard the blast radius: agents launch in the home directory unless a workDir
+  // is set, so bypassPermissions there would leave ~/.env, every repo, and push
+  // access ungated. Require an explicit workDir to opt into it.
+  const VALID_MODES = ['acceptEdits', 'auto', 'bypassPermissions', 'manual', 'dontAsk', 'plan'];
+  let mode = VALID_MODES.includes(permissionMode) ? permissionMode : 'auto';
+  if (mode === 'bypassPermissions' && !workDir?.trim()) {
+    return NextResponse.json(
+      { error: 'bypassPermissions requires a working directory — it will not run against your home folder' },
+      { status: 400 }
+    );
+  }
 
   if (!name?.trim()) {
     return NextResponse.json({ error: 'name required' }, { status: 400 });
@@ -42,6 +57,7 @@ export async function POST(req: NextRequest) {
     projectId,
     projectName: projectName?.trim() || `${emoji} ${name.trim()}`,
     prompt: prompt.trim(),
+    permissionMode: mode,
   };
 
   if (workDir?.trim()) config.workDir = workDir.trim();

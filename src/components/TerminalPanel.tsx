@@ -84,6 +84,8 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
   const respTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const outputBuf = useRef('');       // rolling recent terminal output (for prompt detection)
   const wantTrust = useRef(false);    // "Trust all" armed for this terminal
+  const trustNudges = useRef(0);      // arrow presses spent moving onto "Yes"
+  const trustYesSeen = useRef(0);     // consecutive polls showing "Yes" selected
   const generationRef = useRef(0);    // incremented on each mount — ensures old closures become no-ops
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -137,21 +139,47 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
     const rows = Array.from(rowsEl.children).map((r) => r.textContent || '');
     if (!rows.some((r) => /trust this folder|Yes, I trust|one you trust|do you trust/i.test(r))) return;
 
-    // Locate the "Yes" option and the row the cursor (❯) currently sits on.
-    const yesIdx = rows.findIndex((r) => /Yes,\s*I trust/i.test(r));
-    const selIdx = rows.findIndex((r) => /❯/.test(r) && /Yes,\s*I trust|No,\s*exit/i.test(r));
+    // Find the row the cursor (❯) is on, taking the LAST match: replayed
+    // scrollback can contain several copies of the menu, and indexing by first
+    // match compared the live caret against a stale copy — the selection never
+    // "matched", so we nudged forever and walked the caret past "Yes".
+    const caretRow = rows.filter((r) => /❯/.test(r) && /Yes,\s*I trust|No,\s*exit/i.test(r)).pop();
     // If the menu isn't identifiable, do NOTHING. Sending a blind Enter here is
     // exactly what dismissed the prompt as "No, exit".
-    if (yesIdx < 0 || selIdx < 0) return;
+    if (!caretRow) return;
 
-    wantTrust.current = false; // accept once
-    const delta = yesIdx - selIdx;
-    const arrow = delta > 0 ? '\x1b[B' : '\x1b[A'; // down / up
-    const keys = arrow.repeat(Math.abs(delta));
-    if (keys) ws.send(JSON.stringify({ type: 'input', data: keys }));
-    setTimeout(() => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'input', data: '\r' }));
-    }, 120);
+    // Confirm ONLY when "Yes" is verifiably the selected row.
+    //
+    // The previous version fired the arrow and then Enter 120ms later without
+    // re-checking. If claude's menu wasn't interactive yet the arrow was
+    // swallowed and the Enter confirmed the still-selected default — "No, exit"
+    // — killing the agent with exit 1. That race is why new agents died
+    // intermittently: same keystrokes, different timing.
+    if (/Yes,\s*I trust/i.test(caretRow)) {
+      // Require TWO consecutive reads showing "Yes" before confirming. A single
+      // read can catch the screen mid-repaint and report "Yes" while claude is
+      // still on "No" — Enter then confirms "No, exit" and kills the agent.
+      // Two reads 500ms apart is far longer than a repaint.
+      if (trustYesSeen.current < 1) { trustYesSeen.current += 1; return; }
+      wantTrust.current = false; // accept once
+      ws.send(JSON.stringify({ type: 'input', data: '\r' }));
+      return;
+    }
+    trustYesSeen.current = 0; // caret moved away — start the confirmation over
+
+    // Caret is on "No, exit". Nudge ONE step and let the next poll re-read the
+    // screen. If the keystroke was dropped we just send it again — Enter is
+    // never sent on an unverified selection.
+    //
+    // Give up after a few tries rather than walking the caret around the menu
+    // forever: leaving the prompt for the user is recoverable, confirming the
+    // wrong row is not.
+    if (trustNudges.current >= 6) {
+      wantTrust.current = false;
+      return;
+    }
+    trustNudges.current += 1;
+    ws.send(JSON.stringify({ type: 'input', data: '\x1b[B' }));
   };
 
   // Auto-accept the trust prompt on boot ("pre-trust") — arm on mount and poll

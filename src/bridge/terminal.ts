@@ -40,7 +40,20 @@ interface AgentConfig {
   id: string;
   workDir?: string;
   engine?: 'claude' | 'hermes';
+  model?: string;
+  /** claude --permission-mode. Defaults to 'auto' (see PERMISSION_MODES). */
+  permissionMode?: string;
+  /** Seed/system prompt captured at creation time. */
+  prompt?: string;
 }
+
+// Valid values for `claude --permission-mode`. Anything else is ignored rather
+// than passed through, so a bad config can't wedge the spawn on a CLI error.
+const PERMISSION_MODES = ['acceptEdits', 'auto', 'bypassPermissions', 'manual', 'dontAsk', 'plan'];
+const DEFAULT_PERMISSION_MODE = 'auto';
+
+// Models the picker offers, mapped to what the CLI accepts via --model.
+const CLAUDE_MODELS = ['sonnet', 'opus', 'haiku'];
 
 /** A running agent, kept alive independently of any browser connection. */
 interface Session {
@@ -535,6 +548,33 @@ export function attachTerminalServer(server: Server, stateDir: string): void {
         // Optional seed prompt (e.g. from a Jira ticket) so the agent starts on this task.
         if (safePrompt) agentArgs.push(safePrompt);
       }
+    }
+
+    // Apply the agent's model + permission mode. These were stored in the agent
+    // config but never passed to the CLI, so every agent silently ran on the
+    // settings.json default model with default permissions no matter what was
+    // picked in the New Agent form.
+    //
+    // Flags go at the FRONT: `claude [options] [prompt]` takes the seed prompt as
+    // a trailing positional, so appending here would land them after it.
+    if (engine === 'claude') {
+      const flags: string[] = [];
+
+      const mode = config?.permissionMode ?? DEFAULT_PERMISSION_MODE;
+      if (PERMISSION_MODES.includes(mode)) {
+        flags.push('--permission-mode', mode);
+      } else {
+        console.log(`[terminal] ignoring unknown permissionMode "${mode}" for ${key}`);
+        flags.push('--permission-mode', DEFAULT_PERMISSION_MODE);
+      }
+
+      // Only for a fresh launch — on resume the conversation already has a model
+      // and forcing a different one mid-thread is surprising.
+      if (!sessionFile && config?.model && CLAUDE_MODELS.includes(config.model)) {
+        flags.push('--model', config.model);
+      }
+
+      agentArgs.unshift(...flags);
     }
 
     if (!agentLabel) agentLabel = key.slice(0, 8);
