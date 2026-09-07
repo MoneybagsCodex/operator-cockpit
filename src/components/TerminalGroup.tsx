@@ -1,12 +1,20 @@
 'use client';
 
 import { useState, useEffect, ReactNode } from 'react';
-import { GripVertical } from 'lucide-react';
+import { GripVertical, Rows, Columns, Pencil, Check } from 'lucide-react';
+
+type GroupDirection = 'vertical' | 'horizontal';
 
 interface TerminalGroupProps {
   /** Shared accent color for this group's border and label. */
   color: string;
   memberCount: number;
+  /** 'vertical' stacks members top-to-bottom (default), 'horizontal' side-by-side. */
+  direction: GroupDirection;
+  onToggleDirection: () => void;
+  /** Custom group name; falls back to "Group · N" in the label when unset. */
+  name?: string;
+  onRename: (name: string) => void;
   /** Fires when the user starts dragging this group's handle (to reorder or merge it). */
   onDragStartGroup: () => void;
   onDragEndGroup: () => void;
@@ -20,9 +28,18 @@ interface TerminalGroupProps {
 // A group is ONE movable grid cell holding several TerminalPanels, sharing a
 // single colored border and a single drag handle — dragging the handle moves
 // (or merges) the whole group as one unit, not its individual members.
-export function TerminalGroup({ color, memberCount, onDragStartGroup, onDragEndGroup, onMergeDrop, onReorderDrop, children }: TerminalGroupProps) {
+export function TerminalGroup({ color, memberCount, direction, onToggleDirection, name, onRename, onDragStartGroup, onDragEndGroup, onMergeDrop, onReorderDrop, children }: TerminalGroupProps) {
   const [mergeDragOver, setMergeDragOver] = useState(false);
   const [reorderDragOver, setReorderDragOver] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  const startRename = () => { setDraft(name ?? ''); setEditing(true); };
+  const saveRename = () => {
+    const next = draft.trim();
+    if (next) onRename(next);
+    setEditing(false);
+  };
 
   // Safety net: clear both highlights when any drag ends anywhere on the page,
   // so one can't get stuck on if a dragleave is ever missed (e.g. dropped off-window).
@@ -36,7 +53,10 @@ export function TerminalGroup({ color, memberCount, onDragStartGroup, onDragEndG
   return (
     <div
       className={`relative min-h-0 rounded-lg flex flex-col overflow-hidden transition-shadow ${reorderDragOver ? 'ring-4 ring-blue-400' : ''}`}
-      style={{ border: `4px solid ${color}`, gridRow: memberCount > 1 ? `span ${Math.min(memberCount, 3)}` : undefined }}
+      style={{
+        border: `4px solid ${color}`,
+        gridRow: direction === 'vertical' && memberCount > 1 ? `span ${Math.min(memberCount, 3)}` : undefined,
+      }}
       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setReorderDragOver(true); }}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setReorderDragOver(false); }}
       onDrop={(e) => { e.preventDefault(); setReorderDragOver(false); onReorderDrop(); }}
@@ -67,11 +87,49 @@ export function TerminalGroup({ color, memberCount, onDragStartGroup, onDragEndG
           </div>
         )}
         <GripVertical className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-        <span className="text-[10px] uppercase tracking-wide font-semibold flex-shrink-0" style={{ color }}>
-          Group · {memberCount}
-        </span>
+        {editing ? (
+          <input
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={saveRename}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); saveRename(); }
+              if (e.key === 'Escape') setEditing(false);
+            }}
+            placeholder={`Group · ${memberCount}`}
+            className="min-w-0 flex-1 bg-slate-700 text-slate-100 text-[10px] font-semibold px-1.5 py-0.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-600"
+          />
+        ) : (
+          <span
+            className="min-w-0 flex-1 text-[10px] uppercase tracking-wide font-semibold truncate cursor-text"
+            style={{ color }}
+            onDoubleClick={startRename}
+            title="Double-click to rename this group"
+          >
+            {name || `Group · ${memberCount}`}
+          </span>
+        )}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {editing ? (
+            <button onClick={saveRename} className="text-green-400 hover:text-green-300 transition-colors" title="Save name">
+              <Check className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            <button onClick={startRename} className="text-slate-500 hover:text-slate-300 transition-colors" title="Rename group">
+              <Pencil className="w-3 h-3" />
+            </button>
+          )}
+          <button
+            onClick={onToggleDirection}
+            className="text-slate-500 hover:text-slate-300 transition-colors"
+            title={direction === 'horizontal' ? 'Stack vertically' : 'Arrange side by side'}
+          >
+            {direction === 'horizontal' ? <Columns className="w-3.5 h-3.5" /> : <Rows className="w-3.5 h-3.5" />}
+          </button>
+        </div>
       </div>
-      <div className="flex-1 min-h-0 flex flex-col gap-1 p-1 bg-slate-950">
+      <div className={`flex-1 min-h-0 flex gap-1 p-1 bg-slate-950 ${direction === 'horizontal' ? 'flex-row' : 'flex-col'}`}>
         {children}
       </div>
     </div>

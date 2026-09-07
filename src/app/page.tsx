@@ -107,6 +107,35 @@ export default function Dashboard() {
     });
   }, []);
 
+  // Per-group stacking direction (persist across reloads), keyed by groupId.
+  // Absent = vertical (the default).
+  const [groupLayouts, setGroupLayouts] = useState<Record<string, 'vertical' | 'horizontal'>>({});
+  useEffect(() => {
+    try { setGroupLayouts(JSON.parse(localStorage.getItem('cockpit-group-layouts') || '{}')); } catch { /* ignore */ }
+  }, []);
+  const toggleGroupLayout = useCallback((groupId: string) => {
+    setGroupLayouts((prev) => {
+      const flipped: 'vertical' | 'horizontal' = prev[groupId] === 'horizontal' ? 'vertical' : 'horizontal';
+      const next = { ...prev, [groupId]: flipped };
+      try { localStorage.setItem('cockpit-group-layouts', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
+  // Custom group names (persist across reloads), keyed by groupId. Falls back
+  // to "Group · N" in the UI when absent.
+  const [groupNames, setGroupNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    try { setGroupNames(JSON.parse(localStorage.getItem('cockpit-group-names') || '{}')); } catch { /* ignore */ }
+  }, []);
+  const renameGroup = useCallback((groupId: string, name: string) => {
+    setGroupNames((prev) => {
+      const next = { ...prev, [groupId]: name };
+      try { localStorage.setItem('cockpit-group-names', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
   // Open a live embedded terminal — either a fresh agent session or resume an existing one.
   // Optional `prompt` seeds a launch-mode agent with an initial task. Hard cap of MAX_SESSIONS.
   const openTerminal = useCallback((opts: { mode: 'launch' | 'resume'; id: string; title: string; prompt?: string; cwd?: string }) => {
@@ -441,11 +470,16 @@ export default function Dashboard() {
                 );
               }
               const color = groupColors[cell.groupId!];
+              const direction = groupLayouts[cell.groupId!] ?? 'vertical';
               return (
                 <TerminalGroup
                   key={cell.key}
                   color={color}
                   memberCount={cell.panels.length}
+                  direction={direction}
+                  onToggleDirection={() => toggleGroupLayout(cell.groupId!)}
+                  name={groupNames[cell.groupId!]}
+                  onRename={(name) => renameGroup(cell.groupId!, name)}
                   onDragStartGroup={() => setDraggingCellKey(cell.key)}
                   onDragEndGroup={() => setDraggingCellKey(null)}
                   onMergeDrop={() => {
@@ -458,7 +492,7 @@ export default function Dashboard() {
                   }}
                 >
                   {cell.panels.map((tp) => (
-                    <div key={tp.id} className="flex-1 min-h-0 flex flex-col">
+                    <div key={tp.id} className="flex-1 min-h-0 min-w-0 flex flex-col">
                       <TerminalPanel
                         nested
                         title={sessionNames[tp.rawId] ?? tp.title}
