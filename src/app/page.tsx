@@ -7,6 +7,7 @@ import { AgentStatusBar } from '@/src/components/AgentStatusBar';
 import { SprintTickets } from '@/src/components/SprintTickets';
 import { SessionBrowser } from '@/src/components/SessionBrowser';
 import { TerminalPanel } from '@/src/components/TerminalPanel';
+import { TerminalGroup } from '@/src/components/TerminalGroup';
 import { BootSplash } from '@/src/components/BootSplash';
 import { SyncDetailsPanel } from '@/src/components/SyncDetailsPanel';
 import { useLiveState } from '@/src/hooks/useLiveState';
@@ -49,7 +50,7 @@ export default function Dashboard() {
   const [hydrated, setHydrated] = useState(false); // true once persisted panels are restored
   const [trustSignal, setTrustSignal] = useState(0);
   const [capNotice, setCapNotice] = useState(false);
-  const [draggingPanelId, setDraggingPanelId] = useState<string | null>(null);
+  const [draggingCellKey, setDraggingCellKey] = useState<string | null>(null); // panel id, or groupId when dragging a whole group
   const [sidebarOpen, setSidebarOpen] = useState(true); // sidebar visibility toggle — ALWAYS starts open
   const trustAll = useCallback(() => setTrustSignal((n) => n + 1), []);
 
@@ -264,8 +265,6 @@ export default function Dashboard() {
     // })();
   }, [openTerminal, hydrated]);
 
-  const totalPanels = terminalPanels.length;
-
   // Color-link each open Jira agent (terminal id `jira-<KEY>`) to its ticket card.
   const jiraLinkColors = useMemo(() => {
     const map: Record<string, string> = {};
@@ -292,40 +291,65 @@ export default function Dashboard() {
     return map;
   }, [terminalPanels]);
 
-  // Drop `sourceId` onto `targetId`'s group (creating one if the target is ungrouped).
-  // Moves only the dragged panel — doesn't merge the source's whole prior group.
-  const addToGroup = useCallback((sourceId: string, targetId: string) => {
-    if (sourceId === targetId) return;
+  // The grid's actual units: a standalone panel is its own cell, and every
+  // member sharing a groupId collapses into ONE cell (rendered as a single
+  // TerminalGroup, dragged/reordered/merged as a unit). Order follows
+  // terminalPanels — a cell sits at the position of its first member.
+  type Cell = { key: string; groupId?: string; panels: TerminalPanelState[] };
+  const cells = useMemo<Cell[]>(() => {
+    const seenGroup = new Set<string>();
+    const result: Cell[] = [];
+    for (const tp of terminalPanels) {
+      if (tp.groupId) {
+        if (seenGroup.has(tp.groupId)) continue;
+        seenGroup.add(tp.groupId);
+        result.push({ key: tp.groupId, groupId: tp.groupId, panels: terminalPanels.filter((p) => p.groupId === tp.groupId) });
+      } else {
+        result.push({ key: tp.id, panels: [tp] });
+      }
+    }
+    return result;
+  }, [terminalPanels]);
+
+  const cellKeyOf = (tp: TerminalPanelState) => tp.groupId ?? tp.id;
+
+  // Drop `sourceKey`'s cell onto `targetKey`'s cell: merge ALL of source's
+  // members into target's group (creating one if target has none yet).
+  // Handles panel-onto-panel, panel-onto-group, and group-onto-group alike.
+  const mergeCells = useCallback((sourceKey: string, targetKey: string) => {
+    if (sourceKey === targetKey) return;
     setTerminalPanels((prev) => {
-      const target = prev.find((tp) => tp.id === targetId);
+      const target = prev.find((tp) => cellKeyOf(tp) === targetKey);
       if (!target) return prev;
       const groupId = target.groupId ?? `group-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
       return prev.map((tp) => {
-        if (tp.id === targetId) return tp.groupId ? tp : { ...tp, groupId };
-        if (tp.id === sourceId) return { ...tp, groupId };
+        const k = cellKeyOf(tp);
+        if (k === targetKey) return tp.groupId ? tp : { ...tp, groupId };
+        if (k === sourceKey) return { ...tp, groupId };
         return tp;
       });
+    });
+  }, []);
+
+  // Move `sourceKey`'s cell (all its members, as a block) to just before
+  // `targetKey`'s cell's current position.
+  const reorderCells = useCallback((sourceKey: string, targetKey: string) => {
+    if (sourceKey === targetKey) return;
+    setTerminalPanels((prev) => {
+      const sourceItems = prev.filter((tp) => cellKeyOf(tp) === sourceKey);
+      if (sourceItems.length === 0) return prev;
+      const rest = prev.filter((tp) => cellKeyOf(tp) !== sourceKey);
+      const targetIdx = rest.findIndex((tp) => cellKeyOf(tp) === targetKey);
+      if (targetIdx === -1) return prev;
+      const next = [...rest];
+      next.splice(targetIdx, 0, ...sourceItems);
+      return next;
     });
   }, []);
 
   const leaveGroup = useCallback((id: string) => {
     setTerminalPanels((prev) => prev.map((tp) => (tp.id === id ? { ...tp, groupId: undefined } : tp)));
   }, []);
-
-  // Render order only (state order is untouched): cluster same-group panels
-  // together at the position of the group's first-seen member.
-  const orderedPanels = useMemo(() => {
-    const firstSeen = new Map<string, number>();
-    terminalPanels.forEach((tp, i) => {
-      const key = tp.groupId ?? tp.id;
-      if (!firstSeen.has(key)) firstSeen.set(key, i);
-    });
-    return [...terminalPanels].sort((a, b) => {
-      const ka = a.groupId ?? a.id;
-      const kb = b.groupId ?? b.id;
-      return (firstSeen.get(ka) ?? 0) - (firstSeen.get(kb) ?? 0);
-    });
-  }, [terminalPanels]);
 
   return (
     <>
@@ -378,38 +402,79 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Chat grid — each panel gets a readable minimum height; grid scrolls when there are many */}
+          {/* Chat grid — each cell gets a readable minimum height; grid scrolls when there are many */}
           <div
             className={`flex-1 min-h-0 grid gap-3 overflow-y-auto pr-1 ${
-              totalPanels <= 1 ? 'grid-cols-1' :
-              totalPanels <= 2 ? 'grid-cols-2' :
+              cells.length <= 1 ? 'grid-cols-1' :
+              cells.length <= 2 ? 'grid-cols-2' :
               'grid-cols-2 xl:grid-cols-3'
             }`}
             style={{ gridAutoRows: 'minmax(340px, 1fr)' }}
           >
-            {/* Live embedded terminal sessions (newest first, grouped panels
-                clustered together). The grid shows only these — one window per
-                live session, capped at MAX_SESSIONS. Drag a panel's header onto
-                another to group them (same-thing terminals get a shared color). */}
-            {orderedPanels.map((tp) => (
-              <TerminalPanel
-                key={tp.id}
-                title={sessionNames[tp.rawId] ?? tp.title}
-                wsUrl={tp.wsUrl}
-                trustSignal={trustSignal}
-                linkColor={tp.rawId.startsWith('jira-') ? jiraLinkColors[tp.rawId.slice('jira-'.length)] : undefined}
-                groupColor={tp.groupId ? groupColors[tp.groupId] : undefined}
-                onRename={(name) => renameSession(tp.rawId, name)}
-                onFork={forkSession}
-                onClose={() => closeTerminal(tp.id)}
-                onDragStartPanel={() => setDraggingPanelId(tp.id)}
-                onDropPanel={() => {
-                  if (draggingPanelId) addToGroup(draggingPanelId, tp.id);
-                  setDraggingPanelId(null);
-                }}
-                onLeaveGroup={tp.groupId ? () => leaveGroup(tp.id) : undefined}
-              />
-            ))}
+            {/* Live embedded terminal sessions (newest first). One grid cell per
+                live session, or per group — capped at MAX_SESSIONS live sessions.
+                Drag a panel's (or a group's) header onto another cell's header to
+                merge them into one group; drop on a cell's body to reorder. */}
+            {cells.map((cell) => {
+              const single = cell.panels.length === 1 ? cell.panels[0] : null;
+              if (single) {
+                return (
+                  <TerminalPanel
+                    key={cell.key}
+                    title={sessionNames[single.rawId] ?? single.title}
+                    wsUrl={single.wsUrl}
+                    trustSignal={trustSignal}
+                    linkColor={single.rawId.startsWith('jira-') ? jiraLinkColors[single.rawId.slice('jira-'.length)] : undefined}
+                    onRename={(name) => renameSession(single.rawId, name)}
+                    onFork={forkSession}
+                    onClose={() => closeTerminal(single.id)}
+                    onDragStartPanel={() => setDraggingCellKey(cell.key)}
+                    onMergeDrop={() => {
+                      if (draggingCellKey) mergeCells(draggingCellKey, cell.key);
+                      setDraggingCellKey(null);
+                    }}
+                    onReorderDrop={() => {
+                      if (draggingCellKey) reorderCells(draggingCellKey, cell.key);
+                      setDraggingCellKey(null);
+                    }}
+                  />
+                );
+              }
+              const color = groupColors[cell.groupId!];
+              return (
+                <TerminalGroup
+                  key={cell.key}
+                  color={color}
+                  memberCount={cell.panels.length}
+                  onDragStartGroup={() => setDraggingCellKey(cell.key)}
+                  onDragEndGroup={() => setDraggingCellKey(null)}
+                  onMergeDrop={() => {
+                    if (draggingCellKey) mergeCells(draggingCellKey, cell.key);
+                    setDraggingCellKey(null);
+                  }}
+                  onReorderDrop={() => {
+                    if (draggingCellKey) reorderCells(draggingCellKey, cell.key);
+                    setDraggingCellKey(null);
+                  }}
+                >
+                  {cell.panels.map((tp) => (
+                    <div key={tp.id} className="flex-1 min-h-0 flex flex-col">
+                      <TerminalPanel
+                        nested
+                        title={sessionNames[tp.rawId] ?? tp.title}
+                        wsUrl={tp.wsUrl}
+                        trustSignal={trustSignal}
+                        linkColor={tp.rawId.startsWith('jira-') ? jiraLinkColors[tp.rawId.slice('jira-'.length)] : undefined}
+                        onRename={(name) => renameSession(tp.rawId, name)}
+                        onFork={forkSession}
+                        onClose={() => closeTerminal(tp.id)}
+                        onLeaveGroup={() => leaveGroup(tp.id)}
+                      />
+                    </div>
+                  ))}
+                </TerminalGroup>
+              );
+            })}
 
             {terminalPanels.length === 0 && (
               <div className="col-span-full flex items-center justify-center text-slate-500 text-sm">

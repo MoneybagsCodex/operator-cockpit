@@ -15,15 +15,18 @@ interface TerminalPanelProps {
   trustSignal?: number;
   /** Optional accent color linking this agent to its Jira ticket. */
   linkColor?: string;
-  /** Optional accent color for a user-made terminal group (drag one panel onto another). */
-  groupColor?: string;
   onRename?: (newName: string) => void;
   onFork?: (sessionId: string, title: string) => void;
   onClose: () => void;
-  /** Drag-to-group: fires when the user starts dragging this panel's header. */
+  /** True when rendered inside a TerminalGroup — the group's own handle owns
+   * dragging/merging then, so this panel's header skips its own drag wiring. */
+  nested?: boolean;
+  /** Standalone panels only: fires when the user starts dragging this panel's header. */
   onDragStartPanel?: () => void;
-  /** Drag-to-group: fires when another panel is dropped onto this one. */
-  onDropPanel?: () => void;
+  /** Standalone panels only: another cell was dropped on the header → merge into a group. */
+  onMergeDrop?: () => void;
+  /** Standalone panels only: another cell was dropped on the body → reorder to this position. */
+  onReorderDrop?: () => void;
   /** Present only when this panel is in a group — removes it from that group. */
   onLeaveGroup?: () => void;
 }
@@ -83,8 +86,9 @@ function agentColor(agentName: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
-export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, groupColor, onRename, onFork, onClose, onDragStartPanel, onDropPanel, onLeaveGroup }: TerminalPanelProps) {
-  const [dragOver, setDragOver] = useState(false); // another panel is being dragged over this one's header
+export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, onFork, onClose, nested, onDragStartPanel, onMergeDrop, onReorderDrop, onLeaveGroup }: TerminalPanelProps) {
+  const [mergeDragOver, setMergeDragOver] = useState(false); // another cell is being dragged over this one's header (merge target)
+  const [reorderDragOver, setReorderDragOver] = useState(false); // another cell is being dragged over this one's body (reorder target)
   const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -507,25 +511,30 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, groupColor
 
   return (
     <div
-      className={`min-h-0 bg-[#0b1120] flex flex-col overflow-hidden ${
+      className={`min-h-0 flex-1 bg-[#0b1120] flex flex-col overflow-hidden transition-shadow ${
         maximized ? 'fixed inset-0 z-50 rounded-none' : 'rounded-lg'
-      } ${needsAttention ? 'agent-attention' : ''}`}
+      } ${needsAttention ? 'agent-attention' : ''} ${reorderDragOver ? 'ring-2 ring-blue-400' : ''}`}
       style={{
         borderTop: `4px solid ${agentColor(extractAgentName(wsUrl))}`,
-        borderRight: groupColor ? `4px solid ${groupColor}` : `1px solid rgb(51, 65, 85)`,
-        borderBottom: `1px solid rgb(51, 65, 85)`,
+        borderRight: '1px solid rgb(51, 65, 85)',
+        borderBottom: '1px solid rgb(51, 65, 85)',
         borderLeft: linkColor ? `4px solid ${linkColor}` : `1px solid rgb(51, 65, 85)`,
       }}
+      // Standalone panels only — a nested member's cell-level drag/drop is
+      // owned entirely by its TerminalGroup wrapper.
+      onDragOver={nested ? undefined : (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setReorderDragOver(true); }}
+      onDragLeave={nested ? undefined : () => setReorderDragOver(false)}
+      onDrop={nested ? undefined : (e) => { e.preventDefault(); setReorderDragOver(false); onReorderDrop?.(); }}
     >
-      {/* Header — draggable so this panel can be dropped onto another to group them */}
+      {/* Header — standalone panels: draggable, and dropping another cell here merges a group. */}
       <div
-        className={`border-b bg-slate-800 transition-colors ${dragOver ? 'border-emerald-400 bg-slate-700/70' : 'border-slate-700'}`}
-        draggable
-        onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; onDragStartPanel?.(); }}
-        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => { e.preventDefault(); setDragOver(false); onDropPanel?.(); }}
-        title="Drag onto another terminal to group them"
+        className={`border-b bg-slate-800 transition-colors ${mergeDragOver ? 'border-emerald-400 bg-slate-700/70' : 'border-slate-700'}`}
+        draggable={!nested}
+        onDragStart={nested ? undefined : (e) => { e.dataTransfer.effectAllowed = 'move'; onDragStartPanel?.(); }}
+        onDragOver={nested ? undefined : (e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; setMergeDragOver(true); }}
+        onDragLeave={nested ? undefined : () => setMergeDragOver(false)}
+        onDrop={nested ? undefined : (e) => { e.preventDefault(); e.stopPropagation(); setMergeDragOver(false); onMergeDrop?.(); }}
+        title={nested ? undefined : 'Drag to move. Drop another terminal here to group them.'}
       >
         {/* Title row */}
         <div className="px-3 py-2 flex items-center justify-between gap-2">
@@ -561,14 +570,13 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, groupColor
               : reconnecting
               ? <span className="text-[10px] uppercase tracking-wide text-amber-400 flex-shrink-0 animate-pulse">reconnecting…</span>
               : <span className="text-[10px] uppercase tracking-wide text-cyan-400/70 flex-shrink-0">live</span>}
-            {groupColor && onLeaveGroup && (
+            {onLeaveGroup && (
               <button
                 onClick={onLeaveGroup}
-                className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-slate-400 hover:text-slate-200 transition-colors flex-shrink-0"
+                className="text-[10px] uppercase tracking-wide text-slate-500 hover:text-slate-300 transition-colors flex-shrink-0"
                 title="Remove from group"
               >
-                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: groupColor }} />
-                grouped
+                ungroup
               </button>
             )}
           </div>
