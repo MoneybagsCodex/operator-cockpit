@@ -16,11 +16,16 @@ import { Menu, X } from 'lucide-react';
 // Brand series colors used to visually link a Jira ticket to its spun agent.
 const LINK_COLORS = ['#1F5EFF', '#6202FF', '#2FE9DB', '#FB8F2C', '#87A8FF', '#E0483C'];
 
+// Distinct palette for user-made terminal groups (drag one panel onto another) —
+// kept visually separate from LINK_COLORS so a group never reads as a Jira link.
+const GROUP_COLORS = ['#22c55e', '#eab308', '#a855f7', '#06b6d4', '#f97316', '#ec4899'];
+
 interface TerminalPanelState {
   id: string;       // unique panel id
   rawId: string;    // underlying session/agent id (for custom names)
   title: string;
   wsUrl: string;    // ws://…/terminal?mode=…&agent|session=…
+  groupId?: string; // set when the user drags this panel onto another (or vice versa)
 }
 
 // Bridge WebSocket base (terminals connect directly to the bridge, not Next.js)
@@ -44,6 +49,7 @@ export default function Dashboard() {
   const [hydrated, setHydrated] = useState(false); // true once persisted panels are restored
   const [trustSignal, setTrustSignal] = useState(0);
   const [capNotice, setCapNotice] = useState(false);
+  const [draggingPanelId, setDraggingPanelId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true); // sidebar visibility toggle — ALWAYS starts open
   const trustAll = useCallback(() => setTrustSignal((n) => n + 1), []);
 
@@ -273,6 +279,54 @@ export default function Dashboard() {
     return map;
   }, [terminalPanels]);
 
+  // One color per user-made group, assigned in first-appearance order.
+  const groupColors = useMemo(() => {
+    const map: Record<string, string> = {};
+    let i = 0;
+    for (const tp of terminalPanels) {
+      if (tp.groupId && !(tp.groupId in map)) {
+        map[tp.groupId] = GROUP_COLORS[i % GROUP_COLORS.length];
+        i++;
+      }
+    }
+    return map;
+  }, [terminalPanels]);
+
+  // Drop `sourceId` onto `targetId`'s group (creating one if the target is ungrouped).
+  // Moves only the dragged panel — doesn't merge the source's whole prior group.
+  const addToGroup = useCallback((sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return;
+    setTerminalPanels((prev) => {
+      const target = prev.find((tp) => tp.id === targetId);
+      if (!target) return prev;
+      const groupId = target.groupId ?? `group-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+      return prev.map((tp) => {
+        if (tp.id === targetId) return tp.groupId ? tp : { ...tp, groupId };
+        if (tp.id === sourceId) return { ...tp, groupId };
+        return tp;
+      });
+    });
+  }, []);
+
+  const leaveGroup = useCallback((id: string) => {
+    setTerminalPanels((prev) => prev.map((tp) => (tp.id === id ? { ...tp, groupId: undefined } : tp)));
+  }, []);
+
+  // Render order only (state order is untouched): cluster same-group panels
+  // together at the position of the group's first-seen member.
+  const orderedPanels = useMemo(() => {
+    const firstSeen = new Map<string, number>();
+    terminalPanels.forEach((tp, i) => {
+      const key = tp.groupId ?? tp.id;
+      if (!firstSeen.has(key)) firstSeen.set(key, i);
+    });
+    return [...terminalPanels].sort((a, b) => {
+      const ka = a.groupId ?? a.id;
+      const kb = b.groupId ?? b.id;
+      return (firstSeen.get(ka) ?? 0) - (firstSeen.get(kb) ?? 0);
+    });
+  }, [terminalPanels]);
+
   return (
     <>
       <BootSplash name="Operator Cockpit" />
@@ -333,18 +387,27 @@ export default function Dashboard() {
             }`}
             style={{ gridAutoRows: 'minmax(340px, 1fr)' }}
           >
-            {/* Live embedded terminal sessions (newest first). The grid shows only
-                these — one window per live session, capped at MAX_SESSIONS. */}
-            {terminalPanels.map((tp) => (
+            {/* Live embedded terminal sessions (newest first, grouped panels
+                clustered together). The grid shows only these — one window per
+                live session, capped at MAX_SESSIONS. Drag a panel's header onto
+                another to group them (same-thing terminals get a shared color). */}
+            {orderedPanels.map((tp) => (
               <TerminalPanel
                 key={tp.id}
                 title={sessionNames[tp.rawId] ?? tp.title}
                 wsUrl={tp.wsUrl}
                 trustSignal={trustSignal}
                 linkColor={tp.rawId.startsWith('jira-') ? jiraLinkColors[tp.rawId.slice('jira-'.length)] : undefined}
+                groupColor={tp.groupId ? groupColors[tp.groupId] : undefined}
                 onRename={(name) => renameSession(tp.rawId, name)}
                 onFork={forkSession}
                 onClose={() => closeTerminal(tp.id)}
+                onDragStartPanel={() => setDraggingPanelId(tp.id)}
+                onDropPanel={() => {
+                  if (draggingPanelId) addToGroup(draggingPanelId, tp.id);
+                  setDraggingPanelId(null);
+                }}
+                onLeaveGroup={tp.groupId ? () => leaveGroup(tp.id) : undefined}
               />
             ))}
 

@@ -15,9 +15,17 @@ interface TerminalPanelProps {
   trustSignal?: number;
   /** Optional accent color linking this agent to its Jira ticket. */
   linkColor?: string;
+  /** Optional accent color for a user-made terminal group (drag one panel onto another). */
+  groupColor?: string;
   onRename?: (newName: string) => void;
   onFork?: (sessionId: string, title: string) => void;
   onClose: () => void;
+  /** Drag-to-group: fires when the user starts dragging this panel's header. */
+  onDragStartPanel?: () => void;
+  /** Drag-to-group: fires when another panel is dropped onto this one. */
+  onDropPanel?: () => void;
+  /** Present only when this panel is in a group — removes it from that group. */
+  onLeaveGroup?: () => void;
 }
 
 // Extract session ID from WebSocket URL
@@ -75,7 +83,8 @@ function agentColor(agentName: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
-export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, onFork, onClose }: TerminalPanelProps) {
+export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, groupColor, onRename, onFork, onClose, onDragStartPanel, onDropPanel, onLeaveGroup }: TerminalPanelProps) {
+  const [dragOver, setDragOver] = useState(false); // another panel is being dragged over this one's header
   const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -503,13 +512,21 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
       } ${needsAttention ? 'agent-attention' : ''}`}
       style={{
         borderTop: `4px solid ${agentColor(extractAgentName(wsUrl))}`,
-        borderRight: `1px solid rgb(51, 65, 85)`,
+        borderRight: groupColor ? `4px solid ${groupColor}` : `1px solid rgb(51, 65, 85)`,
         borderBottom: `1px solid rgb(51, 65, 85)`,
         borderLeft: linkColor ? `4px solid ${linkColor}` : `1px solid rgb(51, 65, 85)`,
       }}
     >
-      {/* Header */}
-      <div className="border-b border-slate-700 bg-slate-800">
+      {/* Header — draggable so this panel can be dropped onto another to group them */}
+      <div
+        className={`border-b bg-slate-800 transition-colors ${dragOver ? 'border-emerald-400 bg-slate-700/70' : 'border-slate-700'}`}
+        draggable
+        onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; onDragStartPanel?.(); }}
+        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); onDropPanel?.(); }}
+        title="Drag onto another terminal to group them"
+      >
         {/* Title row */}
         <div className="px-3 py-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -544,6 +561,16 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
               : reconnecting
               ? <span className="text-[10px] uppercase tracking-wide text-amber-400 flex-shrink-0 animate-pulse">reconnecting…</span>
               : <span className="text-[10px] uppercase tracking-wide text-cyan-400/70 flex-shrink-0">live</span>}
+            {groupColor && onLeaveGroup && (
+              <button
+                onClick={onLeaveGroup}
+                className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-slate-400 hover:text-slate-200 transition-colors flex-shrink-0"
+                title="Remove from group"
+              >
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: groupColor }} />
+                grouped
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {onRename && !editing && (
