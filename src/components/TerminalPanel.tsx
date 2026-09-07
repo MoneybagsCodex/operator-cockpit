@@ -89,6 +89,17 @@ function agentColor(agentName: string): string {
 export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, onFork, onClose, nested, onDragStartPanel, onMergeDrop, onReorderDrop, onLeaveGroup }: TerminalPanelProps) {
   const [mergeDragOver, setMergeDragOver] = useState(false); // another cell is being dragged over this one's header (merge target)
   const [reorderDragOver, setReorderDragOver] = useState(false); // another cell is being dragged over this one's body (reorder target)
+
+  // Safety net: any drag ending ANYWHERE on the page (dropped on this card, another
+  // card, or released outside the window entirely) clears both highlights here.
+  // Without this a highlight can get stuck on if a dragleave is ever missed —
+  // e.g. the drag is released off-window, which fires no drop/dragleave on us at all.
+  useEffect(() => {
+    const clear = () => { setMergeDragOver(false); setReorderDragOver(false); };
+    window.addEventListener('dragend', clear);
+    window.addEventListener('drop', clear);
+    return () => { window.removeEventListener('dragend', clear); window.removeEventListener('drop', clear); };
+  }, []);
   const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -511,9 +522,9 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
 
   return (
     <div
-      className={`min-h-0 flex-1 bg-[#0b1120] flex flex-col overflow-hidden transition-shadow ${
+      className={`relative min-h-0 flex-1 bg-[#0b1120] flex flex-col overflow-hidden transition-shadow ${
         maximized ? 'fixed inset-0 z-50 rounded-none' : 'rounded-lg'
-      } ${needsAttention ? 'agent-attention' : ''} ${reorderDragOver ? 'ring-2 ring-blue-400' : ''}`}
+      } ${needsAttention ? 'agent-attention' : ''} ${reorderDragOver ? 'ring-4 ring-blue-400' : ''}`}
       style={{
         borderTop: `4px solid ${agentColor(extractAgentName(wsUrl))}`,
         borderRight: '1px solid rgb(51, 65, 85)',
@@ -521,21 +532,40 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
         borderLeft: linkColor ? `4px solid ${linkColor}` : `1px solid rgb(51, 65, 85)`,
       }}
       // Standalone panels only — a nested member's cell-level drag/drop is
-      // owned entirely by its TerminalGroup wrapper.
+      // owned entirely by its TerminalGroup wrapper. relatedTarget containment
+      // check on dragleave stops it firing (and flickering the highlight) every
+      // time the pointer crosses into a child element instead of truly leaving.
       onDragOver={nested ? undefined : (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setReorderDragOver(true); }}
-      onDragLeave={nested ? undefined : () => setReorderDragOver(false)}
+      onDragLeave={nested ? undefined : (e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setReorderDragOver(false); }}
       onDrop={nested ? undefined : (e) => { e.preventDefault(); setReorderDragOver(false); onReorderDrop?.(); }}
     >
+      {/* Reorder target overlay — only while dragging another cell over this
+          one's body; pointer-events-none so it never interferes with the
+          drag/drop events happening on the elements underneath it. */}
+      {reorderDragOver && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-blue-500/20 pointer-events-none">
+          <span className="px-2.5 py-1 rounded bg-blue-500 text-white text-xs font-semibold shadow-lg">
+            Move here
+          </span>
+        </div>
+      )}
       {/* Header — standalone panels: draggable, and dropping another cell here merges a group. */}
       <div
-        className={`border-b bg-slate-800 transition-colors ${mergeDragOver ? 'border-emerald-400 bg-slate-700/70' : 'border-slate-700'}`}
+        className={`relative border-b bg-slate-800 transition-colors ${mergeDragOver ? 'border-emerald-400 bg-slate-700/70' : 'border-slate-700'}`}
         draggable={!nested}
         onDragStart={nested ? undefined : (e) => { e.dataTransfer.effectAllowed = 'move'; onDragStartPanel?.(); }}
         onDragOver={nested ? undefined : (e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; setMergeDragOver(true); }}
-        onDragLeave={nested ? undefined : () => setMergeDragOver(false)}
+        onDragLeave={nested ? undefined : (e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setMergeDragOver(false); }}
         onDrop={nested ? undefined : (e) => { e.preventDefault(); e.stopPropagation(); setMergeDragOver(false); onMergeDrop?.(); }}
         title={nested ? undefined : 'Drag to move. Drop another terminal here to group them.'}
       >
+        {mergeDragOver && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-emerald-500/20 pointer-events-none">
+            <span className="px-2.5 py-1 rounded bg-emerald-500 text-white text-xs font-semibold shadow-lg">
+              Group together
+            </span>
+          </div>
+        )}
         {/* Title row */}
         <div className="px-3 py-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
