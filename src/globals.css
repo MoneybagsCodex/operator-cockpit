@@ -27,6 +27,15 @@
   100% { content: ''; }
 }
 
+/* Pulsing amber glow — a terminal went idle waiting on the user. Outer
+   box-shadow rather than a border/background so it stays visible even on a
+   small nested panel inside a group. */
+.agent-attention { animation: agentAttentionPulse 1.8s ease-in-out infinite; }
+@keyframes agentAttentionPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.55); }
+  50%      { box-shadow: 0 0 12px 3px rgba(251, 191, 36, 0.55); }
+}
+
 /* ── Color schemes ─────────────────────────────────────────────
    Every `slate-N` utility resolves to rgb(var(--c-N)); accents/background are
    layered on top via the overrides below. Selecting a scheme (data-scheme on
