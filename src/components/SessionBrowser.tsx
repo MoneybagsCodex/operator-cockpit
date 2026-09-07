@@ -12,6 +12,7 @@ interface SessionMeta {
   sizeBytes: number;
   preview: string;
   sessionName?: string;
+  aiTitle?: string;
   agentId?: string;
 }
 
@@ -78,6 +79,7 @@ export function SessionBrowser({ onOpen }: SessionBrowserProps) {
     ? sessions.filter(
         (s) =>
           (s.sessionName?.toLowerCase() ?? '').includes(filter.toLowerCase()) ||
+          (s.aiTitle?.toLowerCase() ?? '').includes(filter.toLowerCase()) ||
           s.projectLabel.toLowerCase().includes(filter.toLowerCase()) ||
           s.preview.toLowerCase().includes(filter.toLowerCase())
       )
@@ -128,15 +130,16 @@ export function SessionBrowser({ onOpen }: SessionBrowserProps) {
               </div>
             ) : (
               filtered.map((s) => {
-                // Lead with whatever actually distinguishes this session — a
-                // custom name, else the first message — not the project label,
-                // which is often the same for many sessions (e.g. "~").
-                const title = s.sessionName || s.preview || s.projectLabel || 'Untitled session';
+                // Lead with whatever actually distinguishes this session: an
+                // explicit cockpit rename, else the CLI's own custom/AI-generated
+                // title (summarizes the actual thread, not just its opening
+                // message), else the first message, else the project label.
+                const title = s.sessionName || s.aiTitle || s.preview || s.projectLabel || 'Untitled session';
                 const showPreviewLine = s.preview && s.preview !== title;
                 return (
                   <button
                     key={s.id}
-                    onClick={() => onOpen(s.id, s.sessionName || s.preview || s.projectLabel)}
+                    onClick={() => onOpen(s.id, s.sessionName || s.aiTitle || s.preview || s.projectLabel)}
                     className="w-full text-left px-3 py-2.5 hover:bg-slate-700/60 border-b border-slate-700/30 last:border-0 transition-colors group"
                   >
                     <div className="flex items-start justify-between gap-2">

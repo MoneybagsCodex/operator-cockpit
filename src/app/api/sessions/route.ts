@@ -27,7 +27,8 @@ export interface SessionMeta {
   lastModified: string;
   sizeBytes: number;
   preview: string; // first user message, truncated
-  sessionName?: string; // custom name if user renamed it
+  sessionName?: string; // custom name if user renamed it (cockpit's own rename)
+  aiTitle?: string; // custom-title or Claude-generated ai-title from the transcript itself
   agentId?: string; // agent ID if known
 }
 
@@ -55,10 +56,12 @@ function labelFromCwd(cwd: string | undefined, dirName: string): string {
   return path.basename(cwd) || projectLabel(dirName);
 }
 
-function readSessionInfo(filePath: string): { preview: string; cwd?: string } {
+function readSessionInfo(filePath: string): { preview: string; cwd?: string; aiTitle?: string } {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split('\n').filter(Boolean);
+
+    // Forward pass: earliest cwd and first real user message (the preview).
     let preview = '';
     let cwd: string | undefined;
     for (const line of lines) {
@@ -76,7 +79,27 @@ function readSessionInfo(filePath: string): { preview: string; cwd?: string } {
         if (preview && cwd) break;
       } catch { /* skip */ }
     }
-    return { preview, cwd };
+
+    // Backward pass: the CLI rewrites custom-title/ai-title entries as a
+    // conversation evolves, so the most recent one (scanning from the end) is
+    // the accurate title — an early one can describe a session that's since
+    // moved on to something else. custom-title (explicitly set in the CLI)
+    // outranks ai-title (auto-generated).
+    let customTitle: string | undefined;
+    let aiTitle: string | undefined;
+    for (let i = lines.length - 1; i >= 0 && !(customTitle && aiTitle); i--) {
+      try {
+        const entry = JSON.parse(lines[i]);
+        if (!customTitle && entry.type === 'custom-title' && typeof entry.customTitle === 'string') {
+          customTitle = entry.customTitle;
+        }
+        if (!aiTitle && entry.type === 'ai-title' && typeof entry.aiTitle === 'string') {
+          aiTitle = entry.aiTitle;
+        }
+      } catch { /* skip */ }
+    }
+
+    return { preview, cwd, aiTitle: customTitle || aiTitle };
   } catch {
     return { preview: '' };
   }
@@ -105,7 +128,7 @@ export async function GET() {
             if (fstat.size < 100) continue; // skip empty/metadata-only files
             const sessionId = file.replace('.jsonl', '');
             const metadata = readSessionMetadata(sessionId);
-            const { preview, cwd } = readSessionInfo(filePath);
+            const { preview, cwd, aiTitle } = readSessionInfo(filePath);
             sessions.push({
               id: sessionId,
               projectDir: dirName,
@@ -115,6 +138,7 @@ export async function GET() {
               sizeBytes: fstat.size,
               preview,
               sessionName: metadata.name,
+              aiTitle,
             });
           } catch { /* skip unreadable */ }
         }
