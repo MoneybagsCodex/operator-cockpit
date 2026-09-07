@@ -27,7 +27,7 @@ interface TerminalPanelState {
 const BRIDGE_WS = process.env.NEXT_PUBLIC_BRIDGE_WS || 'ws://127.0.0.1:3002';
 
 // Most live sessions open at once
-const MAX_SESSIONS = 6;
+const MAX_SESSIONS = 9;
 
 // localStorage key holding the open terminal windows so they survive a refresh.
 const TERMINALS_KEY = 'cockpit-terminals';
