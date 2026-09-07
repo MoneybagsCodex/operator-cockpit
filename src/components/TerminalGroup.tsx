@@ -55,7 +55,13 @@ export function TerminalGroup({ color, memberCount, direction, onToggleDirection
       className={`relative min-h-0 rounded-lg flex flex-col overflow-hidden transition-shadow ${reorderDragOver ? 'ring-4 ring-blue-400' : ''}`}
       style={{
         border: `4px solid ${color}`,
+        // Rotate the block's own footprint like a Tetris piece: vertical spans
+        // extra grid ROWS (tall, narrow), horizontal spans extra grid COLUMNS
+        // (short, wide) — the terminals inside just fill whatever shape results.
+        // Column span capped at 2: the grid's narrowest breakpoint is 2 columns
+        // (grid-cols-2), so spanning further would overflow it.
         gridRow: direction === 'vertical' && memberCount > 1 ? `span ${Math.min(memberCount, 3)}` : undefined,
+        gridColumn: direction === 'horizontal' && memberCount > 1 ? `span ${Math.min(memberCount, 2)}` : undefined,
       }}
       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setReorderDragOver(true); }}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setReorderDragOver(false); }}
