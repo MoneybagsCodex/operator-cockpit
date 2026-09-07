@@ -127,38 +127,43 @@ export function SessionBrowser({ onOpen }: SessionBrowserProps) {
                 {filter ? 'No matches' : 'No sessions found'}
               </div>
             ) : (
-              filtered.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => onOpen(s.id, s.sessionName || s.projectLabel)}
-                  className="w-full text-left px-3 py-2.5 hover:bg-slate-700/60 border-b border-slate-700/30 last:border-0 transition-colors group"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <span className="text-xs font-medium text-slate-200 group-hover:text-white truncate block">
-                        {s.sessionName || s.projectLabel}
-                      </span>
-                      {s.sessionName && (
+              filtered.map((s) => {
+                // Lead with whatever actually distinguishes this session — a
+                // custom name, else the first message — not the project label,
+                // which is often the same for many sessions (e.g. "~").
+                const title = s.sessionName || s.preview || s.projectLabel || 'Untitled session';
+                const showPreviewLine = s.preview && s.preview !== title;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => onOpen(s.id, s.sessionName || s.preview || s.projectLabel)}
+                    className="w-full text-left px-3 py-2.5 hover:bg-slate-700/60 border-b border-slate-700/30 last:border-0 transition-colors group"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-medium text-slate-200 group-hover:text-white truncate block" title={title}>
+                          {title}
+                        </span>
                         <span className="text-xs text-slate-500 truncate block">
                           {s.projectLabel}
                         </span>
-                      )}
+                      </div>
+                      <span className="text-xs text-slate-500 flex-shrink-0 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {timeAgo(s.lastModified)}
+                      </span>
                     </div>
-                    <span className="text-xs text-slate-500 flex-shrink-0 flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {timeAgo(s.lastModified)}
+                    {showPreviewLine && (
+                      <p className="text-xs text-slate-500 mt-0.5 truncate">
+                        {s.preview}
+                      </p>
+                    )}
+                    <span className="text-xs text-slate-600 mt-0.5 block">
+                      {formatSize(s.sizeBytes)}
                     </span>
-                  </div>
-                  {s.preview && (
-                    <p className="text-xs text-slate-500 mt-0.5 truncate">
-                      {s.preview}
-                    </p>
-                  )}
-                  <span className="text-xs text-slate-600 mt-0.5 block">
-                    {formatSize(s.sizeBytes)}
-                  </span>
-                </button>
-              ))
+                  </button>
+                );
+              })
             )}
           </div>
         </div>

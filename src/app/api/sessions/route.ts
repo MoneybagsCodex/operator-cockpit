@@ -31,10 +31,14 @@ export interface SessionMeta {
   agentId?: string; // agent ID if known
 }
 
+// Fallback only — the directory-name encoding replaces every "/" in the cwd
+// with "-", which is ambiguous whenever the real path also contains dashes
+// (e.g. "projects/operator-cockpit"). Used only when no line in the transcript
+// carries a `cwd` field to read the real path from directly.
 function projectLabel(dirName: string): string {
-  // C--Users-me-projects-my-app → my-app
   const decoded = dirName
-    .replace(/^[A-Z]--Users-[^-]+-/, '') // strip drive + user prefix
+    .replace(/^[A-Z]--Users-[^-]+-/, '') // strip drive + user prefix (Windows encoding)
+    .replace(/^-/, '') // strip leading "-" from the encoded absolute path
     .replace(/-/g, '/');
   if (!decoded || decoded === dirName) return dirName;
   const parts = decoded.split('/').filter(Boolean);
@@ -42,25 +46,40 @@ function projectLabel(dirName: string): string {
   return parts.slice(-2).join('/') || parts[0];
 }
 
-function readPreview(filePath: string): string {
+// Real project name, read from the transcript's own `cwd` field rather than
+// decoded from the directory name — reliable even when the project path
+// itself contains dashes.
+function labelFromCwd(cwd: string | undefined, dirName: string): string {
+  if (!cwd) return projectLabel(dirName);
+  if (cwd === os.homedir()) return '~';
+  return path.basename(cwd) || projectLabel(dirName);
+}
+
+function readSessionInfo(filePath: string): { preview: string; cwd?: string } {
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
     const lines = content.split('\n').filter(Boolean);
+    let preview = '';
+    let cwd: string | undefined;
     for (const line of lines) {
       try {
         const entry = JSON.parse(line);
-        if (entry.type === 'user' && entry.message?.content) {
+        if (!cwd && typeof entry.cwd === 'string') cwd = entry.cwd;
+        if (!preview && entry.type === 'user' && entry.message?.content) {
           const text = typeof entry.message.content === 'string'
             ? entry.message.content
             : (Array.isArray(entry.message.content)
                 ? entry.message.content.find((b: { type: string }) => b.type === 'text')?.text ?? ''
                 : '');
-          if (text.trim()) return text.slice(0, 120);
+          if (text.trim()) preview = text.slice(0, 120);
         }
+        if (preview && cwd) break;
       } catch { /* skip */ }
     }
-  } catch { /* unreadable */ }
-  return '';
+    return { preview, cwd };
+  } catch {
+    return { preview: '' };
+  }
 }
 
 export async function GET() {
@@ -86,14 +105,15 @@ export async function GET() {
             if (fstat.size < 100) continue; // skip empty/metadata-only files
             const sessionId = file.replace('.jsonl', '');
             const metadata = readSessionMetadata(sessionId);
+            const { preview, cwd } = readSessionInfo(filePath);
             sessions.push({
               id: sessionId,
               projectDir: dirName,
-              projectLabel: projectLabel(dirName),
+              projectLabel: labelFromCwd(cwd, dirName),
               filePath,
               lastModified: fstat.mtime.toISOString(),
               sizeBytes: fstat.size,
-              preview: readPreview(filePath),
+              preview,
               sessionName: metadata.name,
             });
           } catch { /* skip unreadable */ }
