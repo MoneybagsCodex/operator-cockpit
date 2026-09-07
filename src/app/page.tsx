@@ -51,8 +51,20 @@ export default function Dashboard() {
   const [trustSignal, setTrustSignal] = useState(0);
   const [capNotice, setCapNotice] = useState(false);
   const [draggingCellKey, setDraggingCellKey] = useState<string | null>(null); // panel id, or groupId when dragging a whole group
+  const [gridDragOver, setGridDragOver] = useState(false); // dragging over empty grid space (not any cell)
   const [sidebarOpen, setSidebarOpen] = useState(true); // sidebar visibility toggle — ALWAYS starts open
   const trustAll = useCallback(() => setTrustSignal((n) => n + 1), []);
+
+  // Safety net: a drag released off-window fires no drop/dragend on any of our
+  // own elements, which would leave draggingCellKey stuck set and silently
+  // corrupt the next unrelated drop. Clear it (and the empty-space highlight)
+  // whenever any drag ends anywhere on the page.
+  useEffect(() => {
+    const clear = () => { setDraggingCellKey(null); setGridDragOver(false); };
+    window.addEventListener('dragend', clear);
+    window.addEventListener('drop', clear);
+    return () => { window.removeEventListener('dragend', clear); window.removeEventListener('drop', clear); };
+  }, []);
 
   // Persist sidebar state to localStorage (but always start open)
   useEffect(() => {
@@ -380,6 +392,18 @@ export default function Dashboard() {
     setTerminalPanels((prev) => prev.map((tp) => (tp.id === id ? { ...tp, groupId: undefined } : tp)));
   }, []);
 
+  // Dropped on empty grid space (past the last cell, or unused room in a
+  // partial row) rather than onto another cell — move the whole dragged cell
+  // to the end of the order.
+  const moveCellToEnd = useCallback((sourceKey: string) => {
+    setTerminalPanels((prev) => {
+      const sourceItems = prev.filter((tp) => cellKeyOf(tp) === sourceKey);
+      if (sourceItems.length === 0) return prev;
+      const rest = prev.filter((tp) => cellKeyOf(tp) !== sourceKey);
+      return [...rest, ...sourceItems];
+    });
+  }, []);
+
   return (
     <>
       <BootSplash name="Operator Cockpit" />
@@ -433,17 +457,29 @@ export default function Dashboard() {
 
           {/* Chat grid — each cell gets a readable minimum height; grid scrolls when there are many */}
           <div
-            className={`flex-1 min-h-0 grid gap-3 overflow-y-auto pr-1 ${
+            className={`relative flex-1 min-h-0 grid gap-3 overflow-y-auto pr-1 transition-shadow ${
               cells.length <= 1 ? 'grid-cols-1' :
               cells.length <= 2 ? 'grid-cols-2' :
               'grid-cols-2 xl:grid-cols-3'
-            }`}
+            } ${gridDragOver ? 'ring-2 ring-inset ring-blue-400/60' : ''}`}
             style={{ gridAutoRows: 'minmax(340px, 1fr)' }}
+            // Only reachable when the drop lands on empty space, not a cell —
+            // every cell's own drag handlers stopPropagation() on drop so this
+            // never double-fires alongside a cell-targeted reorder/merge.
+            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setGridDragOver(true); }}
+            onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setGridDragOver(false); }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setGridDragOver(false);
+              if (draggingCellKey) moveCellToEnd(draggingCellKey);
+              setDraggingCellKey(null);
+            }}
           >
             {/* Live embedded terminal sessions (newest first). One grid cell per
                 live session, or per group — capped at MAX_SESSIONS live sessions.
                 Drag a panel's (or a group's) header onto another cell's header to
-                merge them into one group; drop on a cell's body to reorder. */}
+                merge them into one group; drop on a cell's body to reorder, or on
+                empty grid space to send it to the end. */}
             {cells.map((cell) => {
               const single = cell.panels.length === 1 ? cell.panels[0] : null;
               if (single) {

@@ -535,9 +535,11 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
       // owned entirely by its TerminalGroup wrapper. relatedTarget containment
       // check on dragleave stops it firing (and flickering the highlight) every
       // time the pointer crosses into a child element instead of truly leaving.
-      onDragOver={nested ? undefined : (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setReorderDragOver(true); }}
+      // stopPropagation so a drop on an actual cell doesn't also bubble up and
+      // trigger the grid's own "drop on empty space" handler underneath it.
+      onDragOver={nested ? undefined : (e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; setReorderDragOver(true); }}
       onDragLeave={nested ? undefined : (e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setReorderDragOver(false); }}
-      onDrop={nested ? undefined : (e) => { e.preventDefault(); setReorderDragOver(false); onReorderDrop?.(); }}
+      onDrop={nested ? undefined : (e) => { e.preventDefault(); e.stopPropagation(); setReorderDragOver(false); onReorderDrop?.(); }}
     >
       {/* Reorder target overlay — only while dragging another cell over this
           one's body; pointer-events-none so it never interferes with the

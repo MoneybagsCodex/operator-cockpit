@@ -63,9 +63,11 @@ export function TerminalGroup({ color, memberCount, direction, onToggleDirection
         gridRow: direction === 'vertical' && memberCount > 1 ? `span ${Math.min(memberCount, 3)}` : undefined,
         gridColumn: direction === 'horizontal' && memberCount > 1 ? `span ${Math.min(memberCount, 2)}` : undefined,
       }}
-      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setReorderDragOver(true); }}
+      // stopPropagation so a drop on this group doesn't also bubble up and
+      // trigger the grid's own "drop on empty space" handler underneath it.
+      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; setReorderDragOver(true); }}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setReorderDragOver(false); }}
-      onDrop={(e) => { e.preventDefault(); setReorderDragOver(false); onReorderDrop(); }}
+      onDrop={(e) => { e.preventDefault(); e.stopPropagation(); setReorderDragOver(false); onReorderDrop(); }}
     >
       {reorderDragOver && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-blue-500/20 pointer-events-none">
