@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, ReactNode } from 'react';
-import { GripVertical, Rows, Columns, Pencil, Check } from 'lucide-react';
+import { GripVertical, Rows, Columns, Pencil, Check, Bookmark } from 'lucide-react';
 
 type GroupDirection = 'vertical' | 'horizontal';
 
@@ -22,13 +22,17 @@ interface TerminalGroupProps {
   onMergeDrop: () => void;
   /** Dropped onto the group's body → reorder (move the dragged cell to this position). */
   onReorderDrop: () => void;
+  /** True once this group is backed by a saved ProjectGroup (pinned threads, resumable). */
+  isProject: boolean;
+  /** Absent when already a project — saving requires a name first. */
+  onSaveAsProject?: () => void;
   children: ReactNode;
 }
 
 // A group is ONE movable grid cell holding several TerminalPanels, sharing a
 // single colored border and a single drag handle — dragging the handle moves
 // (or merges) the whole group as one unit, not its individual members.
-export function TerminalGroup({ color, memberCount, direction, onToggleDirection, name, onRename, onDragStartGroup, onDragEndGroup, onMergeDrop, onReorderDrop, children }: TerminalGroupProps) {
+export function TerminalGroup({ color, memberCount, direction, onToggleDirection, name, onRename, onDragStartGroup, onDragEndGroup, onMergeDrop, onReorderDrop, isProject, onSaveAsProject, children }: TerminalGroupProps) {
   const [mergeDragOver, setMergeDragOver] = useState(false);
   const [reorderDragOver, setReorderDragOver] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -135,6 +139,19 @@ export function TerminalGroup({ color, memberCount, direction, onToggleDirection
           >
             {direction === 'horizontal' ? <Columns className="w-3.5 h-3.5" /> : <Rows className="w-3.5 h-3.5" />}
           </button>
+          {isProject ? (
+            <Bookmark className="w-3.5 h-3.5" style={{ color, fill: color }} aria-label="Saved as a project" />
+          ) : (
+            onSaveAsProject && (
+              <button
+                onClick={onSaveAsProject}
+                className="text-slate-500 hover:text-amber-300 transition-colors"
+                title="Save as a project — pins these exact threads so relaunching resumes them, not fresh ones"
+              >
+                <Bookmark className="w-3.5 h-3.5" />
+              </button>
+            )
+          )}
         </div>
       </div>
       <div className={`flex-1 min-h-0 flex gap-1 p-1 bg-slate-950 ${direction === 'horizontal' ? 'flex-row' : 'flex-col'}`}>

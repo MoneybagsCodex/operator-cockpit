@@ -6,8 +6,10 @@ import { ApprovalQueue } from '@/src/components/ApprovalQueue';
 import { AgentStatusBar } from '@/src/components/AgentStatusBar';
 import { SprintTickets } from '@/src/components/SprintTickets';
 import { SessionBrowser } from '@/src/components/SessionBrowser';
+import { ProjectGroups } from '@/src/components/ProjectGroups';
 import { TerminalPanel } from '@/src/components/TerminalPanel';
 import { TerminalGroup } from '@/src/components/TerminalGroup';
+import type { ProjectGroup } from '@/src/app/api/project-groups/route';
 import { BootSplash } from '@/src/components/BootSplash';
 import { SyncDetailsPanel } from '@/src/components/SyncDetailsPanel';
 import { useLiveState } from '@/src/hooks/useLiveState';
@@ -125,13 +127,14 @@ export default function Dashboard() {
   useEffect(() => {
     try { setGroupLayouts(JSON.parse(localStorage.getItem('cockpit-group-layouts') || '{}')); } catch { /* ignore */ }
   }, []);
-  const toggleGroupLayout = useCallback((groupId: string) => {
+  const toggleGroupLayout = useCallback((groupId: string, current: 'vertical' | 'horizontal') => {
+    const flipped: 'vertical' | 'horizontal' = current === 'horizontal' ? 'vertical' : 'horizontal';
     setGroupLayouts((prev) => {
-      const flipped: 'vertical' | 'horizontal' = prev[groupId] === 'horizontal' ? 'vertical' : 'horizontal';
       const next = { ...prev, [groupId]: flipped };
       try { localStorage.setItem('cockpit-group-layouts', JSON.stringify(next)); } catch { /* ignore */ }
       return next;
     });
+    if (groupId.startsWith('project:')) patchProjectGroup(groupId.slice('project:'.length), { direction: flipped });
   }, []);
 
   // Custom group names (persist across reloads), keyed by groupId. Falls back
@@ -146,6 +149,36 @@ export default function Dashboard() {
       try { localStorage.setItem('cockpit-group-names', JSON.stringify(next)); } catch { /* ignore */ }
       return next;
     });
+    if (groupId.startsWith('project:')) patchProjectGroup(groupId.slice('project:'.length), { name });
+  }, []);
+
+  // Saved projects: a project group pins specific thread ids (not agent
+  // configs), so "launch this project" resumes the exact same conversations
+  // every time instead of starting fresh ones. Independent of whether any of
+  // its terminals are currently open — that's the whole point.
+  const [projectGroups, setProjectGroups] = useState<ProjectGroup[]>([]);
+  const refetchProjectGroups = useCallback(() => {
+    fetch('/api/project-groups')
+      .then((r) => r.json())
+      .then((d) => setProjectGroups(d.groups ?? []))
+      .catch((err) => console.error('[Cockpit] Failed to load project groups:', err));
+  }, []);
+  useEffect(() => { refetchProjectGroups(); }, [refetchProjectGroups]);
+
+  const patchProjectGroup = useCallback((id: string, patch: Partial<Pick<ProjectGroup, 'name' | 'color' | 'direction' | 'members'>>) => {
+    fetch(`/api/project-groups/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+      .then(() => refetchProjectGroups())
+      .catch((err) => console.error(`[Cockpit] Failed to update project group ${id}:`, err));
+  }, [refetchProjectGroups]);
+
+  const deleteProjectGroup = useCallback((id: string) => {
+    setProjectGroups((prev) => prev.filter((g) => g.id !== id));
+    fetch(`/api/project-groups/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      .catch((err) => console.error(`[Cockpit] Failed to delete project group ${id}:`, err));
   }, []);
 
   // Open a live embedded terminal — either a fresh agent session or resume an existing one.
@@ -319,18 +352,31 @@ export default function Dashboard() {
     return map;
   }, [terminalPanels]);
 
-  // One color per user-made group, assigned in first-appearance order.
+  const projectGroupsById = useMemo(() => {
+    const map: Record<string, ProjectGroup> = {};
+    for (const g of projectGroups) map[g.id] = g;
+    return map;
+  }, [projectGroups]);
+
+  // A saved project's color/name/direction are fixed on the record — the same
+  // every relaunch, not reassigned from a palette by appearance order. Ad hoc
+  // (non-project) groups keep the old first-appearance palette assignment.
   const groupColors = useMemo(() => {
     const map: Record<string, string> = {};
     let i = 0;
     for (const tp of terminalPanels) {
-      if (tp.groupId && !(tp.groupId in map)) {
+      if (!tp.groupId || tp.groupId in map) continue;
+      const projectId = tp.groupId.startsWith('project:') ? tp.groupId.slice('project:'.length) : null;
+      const project = projectId ? projectGroupsById[projectId] : undefined;
+      if (project) {
+        map[tp.groupId] = project.color;
+      } else {
         map[tp.groupId] = GROUP_COLORS[i % GROUP_COLORS.length];
         i++;
       }
     }
     return map;
-  }, [terminalPanels]);
+  }, [terminalPanels, projectGroupsById]);
 
   // The grid's actual units: a standalone panel is its own cell, and every
   // member sharing a groupId collapses into ONE cell (rendered as a single
@@ -404,6 +450,50 @@ export default function Dashboard() {
     });
   }, []);
 
+  // Pin a live group's CURRENT members (their real thread ids, right now) as a
+  // saved project. From then on, relaunching this project resumes these exact
+  // conversations — it doesn't matter that the members were ad hoc a moment ago.
+  const saveGroupAsProject = useCallback((cell: { key: string; panels: TerminalPanelState[] }, name: string, color: string, direction: 'vertical' | 'horizontal') => {
+    const members = cell.panels.map((tp) => ({ pinnedSid: tp.rawId, label: sessionNames[tp.rawId] ?? tp.title }));
+    fetch('/api/project-groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, color, direction, members }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.ok) throw new Error(d.error ?? 'unknown error');
+        const newGroupId = `project:${d.group.id}`;
+        // Adopt the stable project id as this cell's groupId right away, so its
+        // identity is consistent immediately rather than only on next launch.
+        setTerminalPanels((prev) => prev.map((tp) => (cellKeyOf(tp) === cell.key ? { ...tp, groupId: newGroupId } : tp)));
+        refetchProjectGroups();
+      })
+      .catch((err) => console.error('[Cockpit] Failed to save project group:', err));
+  }, [sessionNames, refetchProjectGroups]);
+
+  // Launch a saved project: resume every pinned thread that isn't already open
+  // (never a fresh launch — a project's members are always specific prior
+  // conversations), then stamp the project's stable groupId onto all of them.
+  const launchProjectGroup = useCallback((group: ProjectGroup) => {
+    for (const m of group.members) {
+      const alreadyOpen = terminalPanels.some((tp) => tp.rawId === m.pinnedSid);
+      if (!alreadyOpen) openTerminal({ mode: 'resume', id: m.pinnedSid, title: m.label });
+    }
+    const pinnedSids = new Set(group.members.map((m) => m.pinnedSid));
+    const newGroupId = `project:${group.id}`;
+    setTerminalPanels((prev) => prev.map((tp) => (pinnedSids.has(tp.rawId) ? { ...tp, groupId: newGroupId } : tp)));
+  }, [terminalPanels, openTerminal]);
+
+  // How many of a project's pinned threads are currently open — drives the
+  // "live · N" / "not running" badge in the sidebar list.
+  const projectLiveCounts = useMemo(() => {
+    const openSids = new Set(terminalPanels.map((tp) => tp.rawId));
+    const counts: Record<string, number> = {};
+    for (const g of projectGroups) counts[g.id] = g.members.filter((m) => openSids.has(m.pinnedSid)).length;
+    return counts;
+  }, [projectGroups, terminalPanels]);
+
   return (
     <>
       <BootSplash name="Operator Cockpit" />
@@ -450,6 +540,12 @@ export default function Dashboard() {
                 </div>
               )}
               <ApprovalQueue approvals={approvals} agents={displayAgents} onDecide={decide} />
+              <ProjectGroups
+                groups={projectGroups}
+                liveCounts={projectLiveCounts}
+                onLaunch={launchProjectGroup}
+                onDelete={deleteProjectGroup}
+              />
               <SprintTickets onSpinAgent={spinAgentForTicket} linkColors={jiraLinkColors} />
               <SessionBrowser onOpen={openSessionLive} />
             </div>
@@ -505,17 +601,26 @@ export default function Dashboard() {
                   />
                 );
               }
+              // A saved project's color/name/direction live on the server record —
+              // fixed, not reassigned by appearance order like an ad hoc group.
+              const projectId = cell.groupId!.startsWith('project:') ? cell.groupId!.slice('project:'.length) : null;
+              const project = projectId ? projectGroupsById[projectId] : undefined;
               const color = groupColors[cell.groupId!];
-              const direction = groupLayouts[cell.groupId!] ?? 'vertical';
+              const direction = project?.direction ?? groupLayouts[cell.groupId!] ?? 'vertical';
+              const name = project?.name ?? groupNames[cell.groupId!];
               return (
                 <TerminalGroup
                   key={cell.key}
                   color={color}
                   memberCount={cell.panels.length}
                   direction={direction}
-                  onToggleDirection={() => toggleGroupLayout(cell.groupId!)}
-                  name={groupNames[cell.groupId!]}
-                  onRename={(name) => renameGroup(cell.groupId!, name)}
+                  onToggleDirection={() => toggleGroupLayout(cell.groupId!, direction)}
+                  name={name}
+                  onRename={(newName) => renameGroup(cell.groupId!, newName)}
+                  isProject={!!project}
+                  onSaveAsProject={
+                    project ? undefined : () => saveGroupAsProject(cell, name || `Group of ${cell.panels.length}`, color, direction)
+                  }
                   onDragStartGroup={() => setDraggingCellKey(cell.key)}
                   onDragEndGroup={() => setDraggingCellKey(null)}
                   onMergeDrop={() => {
