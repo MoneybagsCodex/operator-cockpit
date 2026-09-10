@@ -29,6 +29,11 @@ interface TerminalPanelProps {
   onReorderDrop?: () => void;
   /** Present only when this panel is in a group — removes it from that group. */
   onLeaveGroup?: () => void;
+  /** Nested panels only: is the WHOLE group currently fullscreen (not just this panel)? */
+  groupMaximized?: boolean;
+  /** Nested panels only: toggle the whole group's fullscreen state — expand here
+   * always expands every member together, not just this one panel. */
+  onExpandGroup?: () => void;
 }
 
 // Extract session ID from WebSocket URL
@@ -86,7 +91,7 @@ function agentColor(agentName: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
-export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, onFork, onClose, nested, onDragStartPanel, onMergeDrop, onReorderDrop, onLeaveGroup }: TerminalPanelProps) {
+export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, onFork, onClose, nested, onDragStartPanel, onMergeDrop, onReorderDrop, onLeaveGroup, groupMaximized, onExpandGroup }: TerminalPanelProps) {
   const [mergeDragOver, setMergeDragOver] = useState(false); // another cell is being dragged over this one's header (merge target)
   const [reorderDragOver, setReorderDragOver] = useState(false); // another cell is being dragged over this one's body (reorder target)
 
@@ -116,7 +121,11 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
   const [responding, setResponding] = useState(false); // green while output is streaming back
   const [ready, setReady] = useState(false); // false while the agent is booting/initializing
   const [needsAttention, setNeedsAttention] = useState(false); // true when the agent went idle waiting on the user
-  const [maximized, setMaximized] = useState(false); // full-screen this one terminal
+  const [maximized, setMaximized] = useState(false); // full-screen this one terminal (standalone panels only)
+  // Nested panels delegate "maximize" to the whole group instead of going
+  // fullscreen alone — the group wrapper owns the actual fullscreen layout,
+  // this panel just reflects/reports that shared state via its own button.
+  const effectiveMaximized = nested ? !!groupMaximized : maximized;
   const [reconnecting, setReconnecting] = useState(false); // true while retrying a dropped connection
   const [ended, setEnded] = useState(false); // the underlying claude session is gone (won't reconnect)
   const [stalled, setStalled] = useState(false); // repeated flaps — stopped retrying, panel kept
@@ -641,20 +650,22 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
             >
               {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
             </button>
-            {/* Full-screen toggle: <> to expand, X to come back.
+            {/* Full-screen toggle: <> to expand, X to come back. Nested panels
+                delegate to the whole group — expand here expands every member
+                together, arranged vertically, not just this one panel.
                 While full-screen this is the ONLY way back (besides Esc), so it
                 gets button styling + contrast — as a faint 14px glyph it read as
                 the close button and users couldn't find how to un-expand. */}
             <button
-              onClick={() => setMaximized((m) => !m)}
-              className={maximized
+              onClick={() => (nested ? onExpandGroup?.() : setMaximized((m) => !m))}
+              className={effectiveMaximized
                 ? 'flex items-center gap-1 rounded bg-slate-700 px-2 py-1 text-slate-100 hover:bg-slate-600 transition-colors'
                 : 'text-slate-500 hover:text-cyan-400 transition-colors'}
-              title={maximized ? 'Exit full screen (Esc)' : 'Expand to full screen'}
-              aria-label={maximized ? 'Exit full screen' : 'Expand to full screen'}
-              aria-pressed={maximized}
+              title={effectiveMaximized ? 'Exit full screen (Esc)' : nested ? 'Expand whole group to full screen' : 'Expand to full screen'}
+              aria-label={effectiveMaximized ? 'Exit full screen' : 'Expand to full screen'}
+              aria-pressed={effectiveMaximized}
             >
-              {maximized ? (
+              {effectiveMaximized ? (
                 <>
                   <X className="w-4 h-4" />
                   <span className="text-[11px] font-medium leading-none">Exit full screen</span>
@@ -666,7 +677,7 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
             {/* Hidden while full-screen: this X ENDS THE SESSION, and sitting it
                 next to the identical exit-full-screen X invites a misclick that
                 kills the agent. Collapse first to reach it. */}
-            {!maximized && (
+            {!effectiveMaximized && (
               <button
                 onClick={onClose}
                 className="text-slate-500 hover:text-red-400 transition-colors"

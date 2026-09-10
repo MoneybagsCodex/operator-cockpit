@@ -26,13 +26,17 @@ interface TerminalGroupProps {
   isProject: boolean;
   /** Absent when already a project — saving requires a name first. */
   onSaveAsProject?: () => void;
+  /** Fullscreen the WHOLE group (all members, stacked vertically top-to-bottom) —
+   * triggered from any one member's own expand button, not a group-level control. */
+  maximized: boolean;
+  onToggleMaximize: () => void;
   children: ReactNode;
 }
 
 // A group is ONE movable grid cell holding several TerminalPanels, sharing a
 // single colored border and a single drag handle — dragging the handle moves
 // (or merges) the whole group as one unit, not its individual members.
-export function TerminalGroup({ color, memberCount, direction, onToggleDirection, name, onRename, onDragStartGroup, onDragEndGroup, onMergeDrop, onReorderDrop, isProject, onSaveAsProject, children }: TerminalGroupProps) {
+export function TerminalGroup({ color, memberCount, direction, onToggleDirection, name, onRename, onDragStartGroup, onDragEndGroup, onMergeDrop, onReorderDrop, isProject, onSaveAsProject, maximized, onToggleMaximize, children }: TerminalGroupProps) {
   const [mergeDragOver, setMergeDragOver] = useState(false);
   const [reorderDragOver, setReorderDragOver] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -54,9 +58,19 @@ export function TerminalGroup({ color, memberCount, direction, onToggleDirection
     return () => { window.removeEventListener('dragend', clear); window.removeEventListener('drop', clear); };
   }, []);
 
+  // Esc exits the group's fullscreen — same convention as a standalone panel.
+  useEffect(() => {
+    if (!maximized) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onToggleMaximize(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [maximized, onToggleMaximize]);
+
   return (
     <div
-      className={`relative min-h-0 rounded-lg flex flex-col overflow-hidden transition-shadow ${reorderDragOver ? 'ring-4 ring-blue-400' : ''}`}
+      className={`relative min-h-0 flex flex-col overflow-hidden transition-shadow ${
+        maximized ? 'fixed inset-0 z-50 rounded-none' : 'rounded-lg'
+      } ${reorderDragOver ? 'ring-4 ring-blue-400' : ''}`}
       style={{
         border: `4px solid ${color}`,
         // Rotate the block's own footprint like a Tetris piece: vertical spans
@@ -66,6 +80,8 @@ export function TerminalGroup({ color, memberCount, direction, onToggleDirection
         // (grid-cols-2), so spanning further would overflow it. A horizontal
         // group of 3-4 wraps its members onto a second internal row (see body
         // below), so it also claims a second grid row to fit that wrap.
+        // None of this matters once fullscreen (position:fixed ignores grid
+        // placement), so it's simplest to just leave it applied either way.
         gridRow: direction === 'vertical'
           ? (memberCount > 1 ? `span ${Math.min(memberCount, 4)}` : undefined)
           : (memberCount > 2 ? 'span 2' : undefined),
@@ -160,6 +176,9 @@ export function TerminalGroup({ color, memberCount, direction, onToggleDirection
       </div>
       <div
         className={`flex-1 min-h-0 flex gap-1 p-1 bg-slate-950 ${
+          // Fullscreen always stacks top-to-bottom, regardless of the group's
+          // saved side-by-side/stacked preference — that's the point of it.
+          maximized ? 'flex-col' :
           direction === 'horizontal' ? (memberCount > 2 ? 'flex-row flex-wrap' : 'flex-row') : 'flex-col'
         }`}
       >

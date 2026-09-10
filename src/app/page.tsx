@@ -58,6 +58,9 @@ export default function Dashboard() {
   const [capNotice, setCapNotice] = useState(false);
   const [groupCapNotice, setGroupCapNotice] = useState(false);
   const [draggingCellKey, setDraggingCellKey] = useState<string | null>(null); // panel id, or groupId when dragging a whole group
+  // Which group (by cell key) is currently fullscreen, if any — expanding any
+  // one member expands the whole group together, stacked vertically.
+  const [maximizedGroupKey, setMaximizedGroupKey] = useState<string | null>(null);
   const [gridDragOver, setGridDragOver] = useState(false); // dragging over empty grid space (not any cell)
   const [sidebarOpen, setSidebarOpen] = useState(true); // sidebar visibility toggle — ALWAYS starts open
   const trustAll = useCallback(() => setTrustSignal((n) => n + 1), []);
@@ -630,6 +633,7 @@ export default function Dashboard() {
               const color = groupColors[cell.groupId!];
               const direction = project?.direction ?? groupLayouts[cell.groupId!] ?? 'vertical';
               const name = project?.name ?? groupNames[cell.groupId!];
+              const isGroupMaximized = maximizedGroupKey === cell.key;
               return (
                 <TerminalGroup
                   key={cell.key}
@@ -643,6 +647,8 @@ export default function Dashboard() {
                   onSaveAsProject={
                     project ? undefined : () => saveGroupAsProject(cell, name || `Group of ${cell.panels.length}`, color, direction)
                   }
+                  maximized={isGroupMaximized}
+                  onToggleMaximize={() => setMaximizedGroupKey((k) => (k === cell.key ? null : cell.key))}
                   onDragStartGroup={() => setDraggingCellKey(cell.key)}
                   onDragEndGroup={() => setDraggingCellKey(null)}
                   onMergeDrop={() => {
@@ -661,8 +667,9 @@ export default function Dashboard() {
                       // sized to ~half the row so exactly 2 land per wrapped row,
                       // instead of the default flex-1 (which would just keep
                       // shrinking all of them onto one line and never wrap).
+                      // Fullscreen always stacks evenly regardless of that, though.
                       className={`min-h-0 min-w-0 flex flex-col ${
-                        direction === 'horizontal' && cell.panels.length > 2 ? 'flex-[1_1_45%]' : 'flex-1'
+                        !isGroupMaximized && direction === 'horizontal' && cell.panels.length > 2 ? 'flex-[1_1_45%]' : 'flex-1'
                       }`}
                     >
                       <TerminalPanel
@@ -675,6 +682,8 @@ export default function Dashboard() {
                         onFork={forkSession}
                         onClose={() => closeTerminal(tp.id)}
                         onLeaveGroup={() => leaveGroup(tp.id)}
+                        groupMaximized={isGroupMaximized}
+                        onExpandGroup={() => setMaximizedGroupKey((k) => (k === cell.key ? null : cell.key))}
                       />
                     </div>
                   ))}
