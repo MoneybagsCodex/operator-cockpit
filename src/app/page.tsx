@@ -37,6 +37,10 @@ const BRIDGE_WS = process.env.NEXT_PUBLIC_BRIDGE_WS || 'ws://127.0.0.1:3002';
 // Most live sessions open at once
 const MAX_SESSIONS = 9;
 
+// Most terminals allowed in a single group. Past this, a group's grid footprint
+// (see TerminalGroup's rotation logic) and per-member space stop scaling well.
+const MAX_GROUP_SIZE = 4;
+
 // localStorage key holding the open terminal windows so they survive a refresh.
 const TERMINALS_KEY = 'cockpit-terminals';
 
@@ -52,6 +56,7 @@ export default function Dashboard() {
   const [hydrated, setHydrated] = useState(false); // true once persisted panels are restored
   const [trustSignal, setTrustSignal] = useState(0);
   const [capNotice, setCapNotice] = useState(false);
+  const [groupCapNotice, setGroupCapNotice] = useState(false);
   const [draggingCellKey, setDraggingCellKey] = useState<string | null>(null); // panel id, or groupId when dragging a whole group
   const [gridDragOver, setGridDragOver] = useState(false); // dragging over empty grid space (not any cell)
   const [sidebarOpen, setSidebarOpen] = useState(true); // sidebar visibility toggle — ALWAYS starts open
@@ -99,6 +104,12 @@ export default function Dashboard() {
     const t = setTimeout(() => setCapNotice(false), 4000);
     return () => clearTimeout(t);
   }, [capNotice]);
+
+  useEffect(() => {
+    if (!groupCapNotice) return;
+    const t = setTimeout(() => setGroupCapNotice(false), 4000);
+    return () => clearTimeout(t);
+  }, [groupCapNotice]);
 
   // Custom session names (persist across reloads), keyed by session id
   const [sessionNames, setSessionNames] = useState<Record<string, string>>({});
@@ -408,6 +419,12 @@ export default function Dashboard() {
     setTerminalPanels((prev) => {
       const target = prev.find((tp) => cellKeyOf(tp) === targetKey);
       if (!target) return prev;
+      const sourceSize = prev.filter((tp) => cellKeyOf(tp) === sourceKey).length;
+      const targetSize = prev.filter((tp) => cellKeyOf(tp) === targetKey).length;
+      if (sourceSize + targetSize > MAX_GROUP_SIZE) {
+        queueMicrotask(() => setGroupCapNotice(true));
+        return prev;
+      }
       const groupId = target.groupId ?? `group-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
       return prev.map((tp) => {
         const k = cellKeyOf(tp);
@@ -539,6 +556,11 @@ export default function Dashboard() {
                   Max {MAX_SESSIONS} sessions open. Close one (×) before opening another.
                 </div>
               )}
+              {groupCapNotice && (
+                <div className="bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs rounded-lg px-3 py-2">
+                  Max {MAX_GROUP_SIZE} terminals per group.
+                </div>
+              )}
               <ApprovalQueue approvals={approvals} agents={displayAgents} onDecide={decide} />
               <ProjectGroups
                 groups={projectGroups}
@@ -633,7 +655,16 @@ export default function Dashboard() {
                   }}
                 >
                   {cell.panels.map((tp) => (
-                    <div key={tp.id} className="flex-1 min-h-0 min-w-0 flex flex-col">
+                    <div
+                      key={tp.id}
+                      // A wrapped horizontal group (3-4 members) needs each member
+                      // sized to ~half the row so exactly 2 land per wrapped row,
+                      // instead of the default flex-1 (which would just keep
+                      // shrinking all of them onto one line and never wrap).
+                      className={`min-h-0 min-w-0 flex flex-col ${
+                        direction === 'horizontal' && cell.panels.length > 2 ? 'flex-[1_1_45%]' : 'flex-1'
+                      }`}
+                    >
                       <TerminalPanel
                         nested
                         title={sessionNames[tp.rawId] ?? tp.title}

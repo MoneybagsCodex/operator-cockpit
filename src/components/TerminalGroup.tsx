@@ -63,8 +63,12 @@ export function TerminalGroup({ color, memberCount, direction, onToggleDirection
         // extra grid ROWS (tall, narrow), horizontal spans extra grid COLUMNS
         // (short, wide) — the terminals inside just fill whatever shape results.
         // Column span capped at 2: the grid's narrowest breakpoint is 2 columns
-        // (grid-cols-2), so spanning further would overflow it.
-        gridRow: direction === 'vertical' && memberCount > 1 ? `span ${Math.min(memberCount, 3)}` : undefined,
+        // (grid-cols-2), so spanning further would overflow it. A horizontal
+        // group of 3-4 wraps its members onto a second internal row (see body
+        // below), so it also claims a second grid row to fit that wrap.
+        gridRow: direction === 'vertical'
+          ? (memberCount > 1 ? `span ${Math.min(memberCount, 4)}` : undefined)
+          : (memberCount > 2 ? 'span 2' : undefined),
         gridColumn: direction === 'horizontal' && memberCount > 1 ? `span ${Math.min(memberCount, 2)}` : undefined,
       }}
       // stopPropagation so a drop on this group doesn't also bubble up and
@@ -154,7 +158,11 @@ export function TerminalGroup({ color, memberCount, direction, onToggleDirection
           )}
         </div>
       </div>
-      <div className={`flex-1 min-h-0 flex gap-1 p-1 bg-slate-950 ${direction === 'horizontal' ? 'flex-row' : 'flex-col'}`}>
+      <div
+        className={`flex-1 min-h-0 flex gap-1 p-1 bg-slate-950 ${
+          direction === 'horizontal' ? (memberCount > 2 ? 'flex-row flex-wrap' : 'flex-row') : 'flex-col'
+        }`}
+      >
         {children}
       </div>
     </div>
