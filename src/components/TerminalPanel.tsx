@@ -531,8 +531,10 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
 
   return (
     <div
-      className={`relative min-h-0 flex-1 bg-[#0b1120] flex flex-col overflow-hidden transition-shadow ${
-        maximized ? 'fixed inset-0 z-50 rounded-none' : 'rounded-lg'
+      className={`min-h-0 flex-1 bg-[#0b1120] flex flex-col overflow-hidden transition-shadow ${
+        // `relative` and `fixed` must never both be present: Tailwind's stylesheet
+        // order makes .relative win the cascade tie, silently no-opping .fixed.
+        maximized ? 'fixed inset-0 z-50 rounded-none' : 'relative rounded-lg'
       } ${needsAttention ? 'agent-attention' : ''} ${reorderDragOver ? 'ring-4 ring-blue-400' : ''}`}
       style={{
         borderTop: `4px solid ${agentColor(extractAgentName(wsUrl))}`,
