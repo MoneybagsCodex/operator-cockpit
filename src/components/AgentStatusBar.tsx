@@ -50,6 +50,7 @@ export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTermi
   const [trusting, setTrusting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [jiraTickets, setJiraTickets] = useState<Array<{ key: string; summary: string; url: string }>>([]);
+  const [existingFilter, setExistingFilter] = useState('');
 
   // Load Jira tickets the first time the New Agent form opens (for the linker dropdown)
   useEffect(() => {
@@ -183,9 +184,13 @@ export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTermi
     return `${Math.floor(diffMins / 1440)}d`;
   };
 
-  // Configs that don't have an active heartbeat
+  // Configs that don't have an active heartbeat — candidates to reopen rather
+  // than redefine from scratch. There can be dozens of these, so filter by name.
   const liveIds = new Set(agents.map((a) => a.id));
   const offlineConfigs = configs.filter((c) => !liveIds.has(c.id));
+  const filteredOfflineConfigs = existingFilter.trim()
+    ? offlineConfigs.filter((c) => c.name.toLowerCase().includes(existingFilter.trim().toLowerCase()))
+    : offlineConfigs;
 
   if (!mounted) {
     return (
@@ -266,7 +271,42 @@ export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTermi
       </div>
 
       {showForm && (
-        <div className="border-t border-slate-700 px-4 py-3 bg-slate-800/80 flex items-end gap-3 flex-wrap">
+        <div className="border-t border-slate-700 px-4 py-3 bg-slate-800/80">
+          {offlineConfigs.length > 0 && (
+            <div className="mb-3 pb-3 border-b border-slate-700/60">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                  Open an existing agent
+                </span>
+                <span className="text-xs text-slate-600">({offlineConfigs.length})</span>
+                <input
+                  type="text"
+                  placeholder="Filter…"
+                  value={existingFilter}
+                  onChange={(e) => setExistingFilter(e.target.value)}
+                  className="ml-auto w-40 bg-slate-700 text-slate-100 px-2 py-1 text-xs rounded focus:outline-none focus:ring-1 focus:ring-blue-600 placeholder-slate-500"
+                />
+              </div>
+              <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                {filteredOfflineConfigs.length === 0 ? (
+                  <span className="text-xs text-slate-600">No matches</span>
+                ) : (
+                  filteredOfflineConfigs.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => { launch(c.id, c.name); setShowForm(false); }}
+                      title={c.workDir ? `${c.name} — ${c.workDir}` : c.name}
+                      className="flex items-center gap-1.5 text-xs px-2 py-1 rounded bg-slate-700 hover:bg-blue-700 text-slate-300 hover:text-white border border-slate-600 hover:border-blue-600 transition-colors"
+                    >
+                      {c.emoji && <span>{c.emoji}</span>}
+                      {c.name}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+          <div className="flex items-end gap-3 flex-wrap">
           <div className="flex gap-2">
             <input
               type="text"
@@ -360,6 +400,7 @@ export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTermi
             >
               <X className="w-4 h-4" />
             </button>
+          </div>
           </div>
         </div>
       )}
