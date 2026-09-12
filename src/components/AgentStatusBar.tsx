@@ -25,6 +25,10 @@ interface AgentStatusBarProps {
   onLaunchTerminal?: (agentId: string, title: string) => void;
   onOpenProject?: (proj: ProjectDir) => void;
   onTrustAll?: () => void;
+  /** Config ids with a real terminal open right now — used to hide them from
+   * the "open an existing agent" picker. Falls back to the (stale) agents
+   * heartbeat list if not provided. */
+  liveConfigIds?: Set<string>;
 }
 
 // Logo monogram + product name.
@@ -39,7 +43,7 @@ function Brand() {
   );
 }
 
-export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTerminal, onOpenProject, onTrustAll }: AgentStatusBarProps) {
+export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTerminal, onOpenProject, onTrustAll, liveConfigIds }: AgentStatusBarProps) {
   const [mounted, setMounted] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: '', emoji: '🤖', model: 'sonnet', engine: 'claude' as const, prompt: '', workDir: '', permissionMode: 'auto' });
@@ -184,9 +188,11 @@ export function AgentStatusBar({ agents, connected, usingMockData, onLaunchTermi
     return `${Math.floor(diffMins / 1440)}d`;
   };
 
-  // Configs that don't have an active heartbeat — candidates to reopen rather
-  // than redefine from scratch. There can be dozens of these, so filter by name.
-  const liveIds = new Set(agents.map((a) => a.id));
+  // Configs without a real terminal open right now — candidates to reopen
+  // rather than redefine from scratch. There can be dozens of these, so filter
+  // by name. Prefer the actual open-panel set; the heartbeat list is stale
+  // (some entries haven't updated in months) and would hide real configs.
+  const liveIds = liveConfigIds ?? new Set(agents.map((a) => a.id));
   const offlineConfigs = configs.filter((c) => !liveIds.has(c.id));
   const filteredOfflineConfigs = existingFilter.trim()
     ? offlineConfigs.filter((c) => c.name.toLowerCase().includes(existingFilter.trim().toLowerCase()))

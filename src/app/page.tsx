@@ -353,6 +353,12 @@ export default function Dashboard() {
     // })();
   }, [openTerminal, hydrated]);
 
+  // Which agent-config ids are actually open right now — a launch-mode panel's
+  // rawId is exactly the config id it was launched from. Used to hide an agent
+  // from the "open an existing agent" picker only while a real terminal for it
+  // is open, not based on the separate (and largely stale) heartbeat system.
+  const liveConfigIds = useMemo(() => new Set(terminalPanels.map((tp) => tp.rawId)), [terminalPanels]);
+
   // Color-link each open Jira agent (terminal id `jira-<KEY>`) to its ticket card.
   const jiraLinkColors = useMemo(() => {
     const map: Record<string, string> = {};
@@ -526,6 +532,7 @@ export default function Dashboard() {
           onLaunchTerminal={(id, title) => openTerminal({ mode: 'launch', id, title })}
           onOpenProject={openProject}
           onTrustAll={terminalPanels.length > 0 ? trustAll : undefined}
+          liveConfigIds={liveConfigIds}
         />
 
         <div className="flex flex-1 overflow-hidden gap-4 p-4 min-h-0">
