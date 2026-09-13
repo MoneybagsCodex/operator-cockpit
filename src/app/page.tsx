@@ -65,6 +65,8 @@ export default function Dashboard() {
   const [gridDragOver, setGridDragOver] = useState(false); // dragging over empty grid space (not any cell)
   const [sidebarOpen, setSidebarOpen] = useState(true); // sidebar visibility toggle — ALWAYS starts open
   const [projectsCollapsed, setProjectsCollapsed] = useState(false); // Projects section collapse toggle
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null); // grid position where drop will insert
+  const gridRef = useRef<HTMLDivElement>(null); // grid container for position calculations
   const trustAll = useCallback(() => setTrustSignal((n) => n + 1), []);
 
   // Safety net: a drag released off-window fires no drop/dragend on any of our
@@ -72,10 +74,32 @@ export default function Dashboard() {
   // corrupt the next unrelated drop. Clear it (and the empty-space highlight)
   // whenever any drag ends anywhere on the page.
   useEffect(() => {
-    const clear = () => { setDraggingCellKey(null); setGridDragOver(false); };
+    const clear = () => { setDraggingCellKey(null); setGridDragOver(false); setDropTargetIndex(null); };
     window.addEventListener('dragend', clear);
     window.addEventListener('drop', clear);
     return () => { window.removeEventListener('dragend', clear); window.removeEventListener('drop', clear); };
+  }, []);
+
+  // Calculate which grid position the pointer is over based on mouse coordinates
+  const getDropTargetIndex = useCallback((clientX: number, clientY: number): number | null => {
+    if (!gridRef.current) return null;
+    const rect = gridRef.current.getBoundingClientRect();
+    if (clientY < rect.top || clientY > rect.bottom) return null;
+
+    // Get all cell elements in order
+    const cellElements = Array.from(gridRef.current.children) as HTMLElement[];
+    if (cellElements.length === 0) return null;
+
+    // Find which cell the pointer is over by checking bounds
+    for (let i = 0; i < cellElements.length; i++) {
+      const cellRect = cellElements[i].getBoundingClientRect();
+      if (clientX >= cellRect.left && clientX <= cellRect.right &&
+          clientY >= cellRect.top && clientY <= cellRect.bottom) {
+        return i;
+      }
+    }
+    // If past all cells, target the end
+    return cellElements.length;
   }, []);
 
   // Persist sidebar and projects collapse state to localStorage
@@ -494,6 +518,36 @@ export default function Dashboard() {
     });
   }, []);
 
+  // Move a cell to a specific grid position
+  const moveCellToIndex = useCallback((sourceKey: string, targetGridIndex: number) => {
+    setTerminalPanels((prev) => {
+      const sourceItems = prev.filter((tp) => cellKeyOf(tp) === sourceKey);
+      if (sourceItems.length === 0) return prev;
+      const rest = prev.filter((tp) => cellKeyOf(tp) !== sourceKey);
+
+      // Map grid index to array position by reconstructing cells
+      const seenCells = new Set<string>();
+      let cellCount = 0;
+      let insertPos = rest.length; // Default: insert at end
+
+      for (let i = 0; i < rest.length; i++) {
+        const key = cellKeyOf(rest[i]);
+        if (!seenCells.has(key)) {
+          seenCells.add(key);
+          if (cellCount === targetGridIndex) {
+            insertPos = i;
+            break;
+          }
+          cellCount++;
+        }
+      }
+
+      const next = [...rest];
+      next.splice(insertPos, 0, ...sourceItems);
+      return next;
+    });
+  }, []);
+
   // Pin a live group's CURRENT members (their real thread ids, right now) as a
   // saved project. From then on, relaunching this project resumes these exact
   // conversations — it doesn't matter that the members were ad hoc a moment ago.
@@ -606,6 +660,7 @@ export default function Dashboard() {
 
           {/* Chat grid — each cell gets a readable minimum height; grid scrolls when there are many */}
           <div
+            ref={gridRef}
             className={`relative flex-1 min-h-0 grid gap-3 overflow-y-auto pr-1 transition-shadow ${
               cells.length <= 1 ? 'grid-cols-1' :
               cells.length <= 2 ? 'grid-cols-2' :
@@ -615,13 +670,24 @@ export default function Dashboard() {
             // Only reachable when the drop lands on empty space, not a cell —
             // every cell's own drag handlers stopPropagation() on drop so this
             // never double-fires alongside a cell-targeted reorder/merge.
-            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setGridDragOver(true); }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              setGridDragOver(true);
+              if (draggingCellKey && gridRef.current) {
+                const idx = getDropTargetIndex(e.clientX, e.clientY);
+                setDropTargetIndex(idx);
+              }
+            }}
             onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setGridDragOver(false); }}
             onDrop={(e) => {
               e.preventDefault();
               setGridDragOver(false);
-              if (draggingCellKey) moveCellToEnd(draggingCellKey);
+              if (draggingCellKey && dropTargetIndex !== null) {
+                moveCellToIndex(draggingCellKey, dropTargetIndex);
+              }
               setDraggingCellKey(null);
+              setDropTargetIndex(null);
             }}
           >
             {/* Live embedded terminal sessions (newest first). One grid cell per
@@ -718,6 +784,16 @@ export default function Dashboard() {
                 </TerminalGroup>
               );
             })}
+
+            {/* Visual feedback: show where the cell will be dropped */}
+            {dropTargetIndex !== null && draggingCellKey && (
+              <div
+                key="drop-target"
+                className="border-2 border-dashed border-blue-400/60 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400/70 text-xs font-semibold"
+              >
+                Drop here
+              </div>
+            )}
 
             {terminalPanels.length === 0 && (
               <div className="col-span-full flex items-center justify-center text-slate-500 text-sm">
