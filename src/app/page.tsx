@@ -64,6 +64,7 @@ export default function Dashboard() {
   const [maximizedGroupKey, setMaximizedGroupKey] = useState<string | null>(null);
   const [gridDragOver, setGridDragOver] = useState(false); // dragging over empty grid space (not any cell)
   const [sidebarOpen, setSidebarOpen] = useState(true); // sidebar visibility toggle — ALWAYS starts open
+  const [projectsCollapsed, setProjectsCollapsed] = useState(false); // Projects section collapse toggle
   const trustAll = useCallback(() => setTrustSignal((n) => n + 1), []);
 
   // Safety net: a drag released off-window fires no drop/dragend on any of our
@@ -77,7 +78,7 @@ export default function Dashboard() {
     return () => { window.removeEventListener('dragend', clear); window.removeEventListener('drop', clear); };
   }, []);
 
-  // Persist sidebar state to localStorage (but always start open)
+  // Persist sidebar and projects collapse state to localStorage
   useEffect(() => {
     console.log('[Dashboard] Initializing, sidebar will be open');
     try {
@@ -94,6 +95,16 @@ export default function Dashboard() {
       console.warn('[Dashboard] Error loading sidebar state:', e);
       setSidebarOpen(true);
     }
+
+    // Load projects collapse state
+    try {
+      const saved = localStorage.getItem('cockpit-projects-collapsed');
+      if (saved === '1') {
+        setProjectsCollapsed(true);
+      }
+    } catch (e) {
+      console.warn('[Dashboard] Error loading projects collapse state:', e);
+    }
   }, []);
 
   useEffect(() => {
@@ -101,6 +112,12 @@ export default function Dashboard() {
       localStorage.setItem('cockpit-sidebar-open', JSON.stringify(sidebarOpen));
     } catch { /* ignore */ }
   }, [sidebarOpen]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('cockpit-projects-collapsed', projectsCollapsed ? '1' : '0');
+    } catch { /* ignore */ }
+  }, [projectsCollapsed]);
 
   // Auto-dismiss the "max sessions" notice
   useEffect(() => {
@@ -579,6 +596,8 @@ export default function Dashboard() {
                 liveCounts={projectLiveCounts}
                 onLaunch={launchProjectGroup}
                 onDelete={deleteProjectGroup}
+                collapsed={projectsCollapsed}
+                onToggleCollapsed={() => setProjectsCollapsed((v) => !v)}
               />
               <SprintTickets onSpinAgent={spinAgentForTicket} linkColors={jiraLinkColors} />
               <SessionBrowser onOpen={openSessionLive} />
