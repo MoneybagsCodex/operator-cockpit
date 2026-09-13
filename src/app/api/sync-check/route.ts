@@ -2,12 +2,21 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import crypto from 'crypto';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import Anthropic from '@anthropic-ai/sdk';
 
 const execAsync = promisify(exec);
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+
+const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }) : null;
+// Keyed by a hash of the exact diff text — the same unchanged commit/diff
+// should never re-spend a Haiku call across repeated fetches (page loads,
+// clicking "Sync", KnowledgeSyncPanel's own mount). Module-scope Map persists
+// for the life of the dev/prod server process; cheap enough not to need more.
+const summaryCache = new Map<string, string[]>();
 
 interface FileChange {
   type: 'changed' | 'added' | 'removed';
@@ -23,6 +32,7 @@ interface FileSyncInfo {
   commitDate?: string;
   changes: FileChange[];
   truncated: boolean; // more changes exist than shown
+  summary?: string[]; // plain-English bullets from Haiku; absent if unavailable — UI falls back to `changes`
 }
 
 interface SyncCheckResult {
@@ -100,6 +110,37 @@ function parseDiffToChanges(diffText: string): FileChange[] {
   return changes.filter((c) => (c.before || c.after || c.text || '').length > 0);
 }
 
+// Plain-English bullet summary of a raw diff, via Haiku — the cheapest model,
+// on a short prompt with a small output cap, and cached by exact diff content
+// so the same commit/diff is never re-summarized on a later fetch. Returns
+// undefined (not a thrown error) on any failure — the caller falls back to
+// the raw line-level `changes` display, never blocking the rest of the check.
+async function summarizeDiff(displayName: string, diffText: string): Promise<string[] | undefined> {
+  if (!anthropic || !diffText.trim()) return undefined;
+  const cacheKey = crypto.createHash('sha1').update(`${displayName}:${diffText}`).digest('hex');
+  const cached = summaryCache.get(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      system: 'You summarize git diffs of a personal knowledge-base file into short plain-English bullet points. '
+        + 'Output ONLY 2-4 bullet points, each starting with "- ", no preamble, no markdown headers, no closing remarks. '
+        + 'Describe what changed and why it likely matters, not the raw text edits.',
+      messages: [{ role: 'user', content: `File: ${displayName}\n\nDiff:\n${diffText.slice(0, 4000)}` }],
+    });
+    const text = response.content.filter((b) => b.type === 'text').map((b) => (b as { type: 'text'; text: string }).text).join('');
+    const bullets = text.split('\n').map((l) => l.trim()).filter((l) => l.startsWith('- ')).map((l) => l.slice(2).trim());
+    if (bullets.length === 0) return undefined;
+    summaryCache.set(cacheKey, bullets);
+    return bullets;
+  } catch (err) {
+    console.error(`[sync-check] Haiku summary failed for ${displayName}:`, err instanceof Error ? err.message : err);
+    return undefined;
+  }
+}
+
 // What changed in this file, and where it came from: uncommitted edits (the
 // most current, actionable signal) if any exist, else the most recent commit
 // that touched it (still real history, clearly labeled as already-synced).
@@ -108,7 +149,8 @@ async function getFileChanges(cwd: string, relPath: string, displayName: string)
     const { stdout: uncommittedDiff } = await execAsync(`git diff -- "${relPath}"`, { cwd });
     if (uncommittedDiff.trim()) {
       const all = parseDiffToChanges(uncommittedDiff);
-      return { file: displayName, source: 'uncommitted', changes: all.slice(0, MAX_CHANGES_PER_FILE), truncated: all.length > MAX_CHANGES_PER_FILE };
+      const summary = await summarizeDiff(displayName, uncommittedDiff);
+      return { file: displayName, source: 'uncommitted', changes: all.slice(0, MAX_CHANGES_PER_FILE), truncated: all.length > MAX_CHANGES_PER_FILE, summary };
     }
   } catch { /* not a git repo, or git unavailable — fall through */ }
 
@@ -118,6 +160,7 @@ async function getFileChanges(cwd: string, relPath: string, displayName: string)
     if (!hash) return { file: displayName, source: 'none', changes: [], truncated: false };
     const { stdout: commitDiff } = await execAsync(`git show ${hash} -- "${relPath}"`, { cwd });
     const all = parseDiffToChanges(commitDiff);
+    const summary = await summarizeDiff(displayName, commitDiff);
     return {
       file: displayName,
       source: 'commit',
@@ -125,6 +168,7 @@ async function getFileChanges(cwd: string, relPath: string, displayName: string)
       commitDate: date,
       changes: all.slice(0, MAX_CHANGES_PER_FILE),
       truncated: all.length > MAX_CHANGES_PER_FILE,
+      summary,
     };
   } catch {
     return { file: displayName, source: 'none', changes: [], truncated: false };

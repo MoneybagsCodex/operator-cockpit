@@ -17,6 +17,7 @@ interface FileSyncInfo {
   commitDate?: string;
   changes: FileChange[];
   truncated: boolean;
+  summary?: string[]; // plain-English bullets from Haiku — preferred display when present
 }
 
 interface SyncCheckResult {
@@ -121,6 +122,15 @@ export function KnowledgeSyncPanel() {
                   </div>
                   {fc.changes.length === 0 ? (
                     <p className="text-xs text-slate-600 pl-1">No changes on record.</p>
+                  ) : fc.summary && fc.summary.length > 0 ? (
+                    <div className="space-y-1 pl-1">
+                      {fc.summary.map((bullet, i) => (
+                        <div key={i} className="text-xs text-slate-400 flex gap-1.5">
+                          <span className="text-slate-500">•</span>
+                          <span>{bullet}</span>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
                     <div className="space-y-1 pl-1 font-mono">
                       {fc.changes.map((c, i) => (
