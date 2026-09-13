@@ -3,25 +3,27 @@ import { test, expect } from '@playwright/test';
 test.describe('Dashboard Viewer', () => {
   test('Dashboard tile appears in sidebar', async ({ page }) => {
     await page.goto('http://localhost:3001');
-    // Wait for page to load
-    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(3000);
 
-    const dashboardButton = page.locator('button:has-text("DASHBOARD")').first();
+    const dashboardButton = page.locator('span:has-text("Dashboard")').first();
     await expect(dashboardButton).toBeVisible();
   });
 
   test('Dashboard expands and shows content', async ({ page }) => {
     await page.goto('http://localhost:3001');
-    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(3000);
 
-    const dashboardButton = page.locator('button:has-text("DASHBOARD")').first();
+    // Find the dashboard button by looking for the container with DASHBOARD text
+    const dashboardContainer = page.locator('button:has(span:has-text("Dashboard"))').first();
 
     // Click to expand
-    await dashboardButton.click();
+    await dashboardContainer.click();
+    await page.waitForTimeout(2000);
 
-    // Should see content loading or loaded
-    const dashboardContent = page.locator('div:has-text("Global Operations Dashboard"), div:has-text("Loading dashboard")');
-    await expect(dashboardContent.first()).toBeVisible({ timeout: 5000 });
+    // Check that the container now has a p tag (from markdown parsing)
+    // or contains text from the dashboard content
+    const expandedContent = dashboardContainer.locator('xpath=following-sibling::div[1]');
+    await expect(expandedContent).toContainText(/Global|Priority|Operations/);
   });
 
   test('Dashboard API returns markdown content', async ({ request }) => {
