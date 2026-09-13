@@ -110,11 +110,33 @@ function parseDiffToChanges(diffText: string): FileChange[] {
   return changes.filter((c) => (c.before || c.after || c.text || '').length > 0);
 }
 
+// Every commit to this repo is made by a Claude agent that already wrote a
+// real, intent-aware explanation of the change — not just a diff, the *why*.
+// Free, more accurate than re-summarizing blind, and always available for
+// anything already committed. Only the (rare) uncommitted case has nothing
+// authored yet, which is the one place a Haiku call still earns its keep.
+function extractSummaryFromCommitBody(body: string): string[] {
+  const lines = body.split('\n').map((l) => l.trim());
+  const bullets = lines.filter((l) => l.startsWith('- ') || l.startsWith('* ')).map((l) => l.slice(2).trim());
+  if (bullets.length > 0) return bullets;
+
+  // No bullets — fall back to the first real paragraph of the body (skipping
+  // the subject line and attribution trailers), else nothing usable at all.
+  const paragraph = lines
+    .slice(1)
+    .filter((l) => l && !l.startsWith('Co-Authored-By') && !l.startsWith('Claude-Session'))
+    .join(' ')
+    .trim();
+  return paragraph ? [paragraph] : [];
+}
+
 // Plain-English bullet summary of a raw diff, via Haiku — the cheapest model,
 // on a short prompt with a small output cap, and cached by exact diff content
 // so the same commit/diff is never re-summarized on a later fetch. Returns
 // undefined (not a thrown error) on any failure — the caller falls back to
 // the raw line-level `changes` display, never blocking the rest of the check.
+// Reserved for uncommitted changes only — anything committed already has a
+// real authored explanation (see extractSummaryFromCommitBody above).
 async function summarizeDiff(displayName: string, diffText: string): Promise<string[] | undefined> {
   if (!anthropic || !diffText.trim()) return undefined;
   const cacheKey = crypto.createHash('sha1').update(`${displayName}:${diffText}`).digest('hex');
@@ -160,7 +182,10 @@ async function getFileChanges(cwd: string, relPath: string, displayName: string)
     if (!hash) return { file: displayName, source: 'none', changes: [], truncated: false };
     const { stdout: commitDiff } = await execAsync(`git show ${hash} -- "${relPath}"`, { cwd });
     const all = parseDiffToChanges(commitDiff);
-    const summary = await summarizeDiff(displayName, commitDiff);
+    // The committing agent already explained this — use that, not a blind
+    // re-summary of the diff. No API call needed for anything committed.
+    const { stdout: body } = await execAsync(`git log -1 --format=%B -- "${relPath}"`, { cwd });
+    const summary = extractSummaryFromCommitBody(body);
     return {
       file: displayName,
       source: 'commit',
