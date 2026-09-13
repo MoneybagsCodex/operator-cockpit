@@ -1,7 +1,39 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ChevronDown, AlertCircle } from 'lucide-react';
+import { marked } from 'marked';
+
+function DashboardContent({ markdown }: { markdown: string }) {
+  const html = useMemo(() => {
+    // Take only first ~30 lines for sidebar display
+    const lines = markdown.split('\n').slice(0, 50).join('\n');
+    return marked(lines);
+  }, [markdown]);
+
+  return (
+    <div className="prose prose-invert prose-sm max-w-none text-slate-300">
+      <style>{`
+        .prose-dashboard h1 { @apply text-sm font-bold text-slate-100 mt-2 mb-1; }
+        .prose-dashboard h2 { @apply text-xs font-bold text-slate-200 mt-1.5 mb-0.5; }
+        .prose-dashboard h3 { @apply text-xs font-semibold text-slate-300 mt-1 mb-0.5; }
+        .prose-dashboard p { @apply text-xs text-slate-400 my-1; }
+        .prose-dashboard ul { @apply text-xs text-slate-400 my-1 ml-3; }
+        .prose-dashboard li { @apply my-0.5; }
+        .prose-dashboard table { @apply text-[10px] my-1; }
+        .prose-dashboard th { @apply bg-slate-800 text-slate-200 px-1 py-0.5; }
+        .prose-dashboard td { @apply border border-slate-700 px-1 py-0.5; }
+        .prose-dashboard code { @apply bg-slate-800 px-1 text-slate-300 font-mono text-[9px]; }
+        .prose-dashboard strong { @apply text-slate-200; }
+        .prose-dashboard em { @apply text-slate-300 italic; }
+      `}</style>
+      <div
+        className="prose-dashboard text-xs leading-relaxed"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    </div>
+  );
+}
 
 export function DashboardViewer() {
   const [content, setContent] = useState<string>('');
@@ -48,7 +80,7 @@ export function DashboardViewer() {
       </button>
 
       {!collapsed && (
-        <div className="p-3 border-t border-slate-700 max-h-[40vh] overflow-y-auto bg-slate-900">
+        <div className="p-3 border-t border-slate-700 max-h-[45vh] overflow-y-auto bg-slate-900">
           {loading ? (
             <div className="text-xs text-slate-400">Loading dashboard…</div>
           ) : error ? (
@@ -57,19 +89,7 @@ export function DashboardViewer() {
               <span className="text-xs">{error}</span>
             </div>
           ) : content ? (
-            <div className="text-[10px] leading-relaxed text-slate-300 space-y-0.5">
-              {content
-                .split('\n')
-                .slice(0, 60)
-                .map((line, i) => (
-                  <div key={i} className="font-mono">{line || ' '}</div>
-                ))}
-              {content.split('\n').length > 60 && (
-                <div className="text-slate-500 italic text-[9px]">
-                  …({content.split('\n').length - 60} more lines)
-                </div>
-              )}
-            </div>
+            <DashboardContent markdown={content} />
           ) : null}
         </div>
       )}
