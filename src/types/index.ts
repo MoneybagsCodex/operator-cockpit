@@ -105,6 +105,20 @@ export interface ApprovalRequest {
   expiresAt?: Date;
 }
 
+// Recovery request — Phase 1 of the usage-limit resilience feature: detect
+// and notify only. Written by scripts/detect-usage-limit.sh (a Claude Code
+// StopFailure/rate_limit hook), read by the dashboard. No launch action
+// exists yet — acknowledging just clears the notification.
+export interface RecoveryRequest {
+  id: string;
+  sessionId: string;      // Claude Code's own session_id (not the cockpit sid)
+  cwd: string;
+  reason: string;         // the matched hard-limit phrase, e.g. "session limit"
+  lastAssistantMessage?: string;
+  transcriptPath?: string;
+  detectedAt: string;
+}
+
 // Chat Message
 export interface ChatMessage {
   id: string;

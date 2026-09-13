@@ -12,6 +12,7 @@ import { TerminalGroup } from '@/src/components/TerminalGroup';
 import type { ProjectGroup } from '@/src/app/api/project-groups/route';
 import { BootSplash } from '@/src/components/BootSplash';
 import { KnowledgeSyncPanel } from '@/src/components/KnowledgeSyncPanel';
+import { RecoveryBanner } from '@/src/components/RecoveryBanner';
 import { useLiveState } from '@/src/hooks/useLiveState';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Menu, X } from 'lucide-react';
@@ -560,6 +561,7 @@ export default function Dashboard() {
                   <X className="w-4 h-4" />
                 </button>
               </div>
+              <RecoveryBanner />
               <KnowledgeSyncPanel />
               {capNotice && (
                 <div className="bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs rounded-lg px-3 py-2">

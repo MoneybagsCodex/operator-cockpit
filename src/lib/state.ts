@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { AgentEvent, ApprovalRequest, Agent, Project, ChatMessage, ApprovalStatus } from '@/src/types';
+import { AgentEvent, ApprovalRequest, Agent, Project, ChatMessage, ApprovalStatus, RecoveryRequest } from '@/src/types';
 
 export const STATE_DIR = process.env.OPERATOR_STATE_DIR || path.join(os.homedir(), '.operator-state');
 
@@ -16,6 +16,10 @@ export const PATHS = {
   agents: path.join(STATE_DIR, 'agents'),
   projects: path.join(STATE_DIR, 'projects'),
   chat: path.join(STATE_DIR, 'chat'),
+  recovery: {
+    pending: path.join(STATE_DIR, 'recovery', 'pending'),
+    acknowledged: path.join(STATE_DIR, 'recovery', 'acknowledged'),
+  },
 };
 
 function readJsonFile<T>(filePath: string): T | null {
@@ -124,6 +128,37 @@ export function decideApproval(
 
   console.log(`[state] ✓ Approval moved: ${id} → ${decision}`);
   return updated;
+}
+
+// Recovery requests — Phase 1 (detect + notify only, no launch).
+// Same directory-as-state-machine shape as approvals: a pending file
+// acknowledged by the dashboard moves to acknowledged/, nothing more.
+
+export function readRecoveryRequests(status?: 'pending' | 'acknowledged' | 'all'): RecoveryRequest[] {
+  const dirs = status === 'all' || !status
+    ? [PATHS.recovery.pending, PATHS.recovery.acknowledged]
+    : [PATHS.recovery[status]];
+
+  return dirs.flatMap((dir) => {
+    try {
+      return fs.readdirSync(dir)
+        .filter((f) => f.endsWith('.json'))
+        .map((f) => readJsonFile<RecoveryRequest>(path.join(dir, f)))
+        .filter((r): r is RecoveryRequest => r !== null);
+    } catch {
+      return [];
+    }
+  });
+}
+
+export function acknowledgeRecovery(id: string): boolean {
+  const sourceFile = path.join(PATHS.recovery.pending, `${id}.json`);
+  const request = readJsonFile<RecoveryRequest>(sourceFile);
+  if (!request) return false;
+
+  writeJsonFile(path.join(PATHS.recovery.acknowledged, `${id}.json`), request);
+  try { fs.unlinkSync(sourceFile); } catch { /* already moved */ }
+  return true;
 }
 
 // Agents
