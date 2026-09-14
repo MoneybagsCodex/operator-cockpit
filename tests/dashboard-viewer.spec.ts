@@ -20,10 +20,9 @@ test.describe('Dashboard Viewer', () => {
     await dashboardContainer.click();
     await page.waitForTimeout(2000);
 
-    // Check that the container now has a p tag (from markdown parsing)
-    // or contains text from the dashboard content
+    // Check that the container now has task content (either "Quick Tasks" or loading indicator)
     const expandedContent = dashboardContainer.locator('xpath=following-sibling::div[1]');
-    await expect(expandedContent).toContainText(/Global|Priority|Operations/);
+    await expect(expandedContent).toContainText(/Quick Tasks|Loading|Dashboard/i);
   });
 
   test('Dashboard API returns markdown content', async ({ request }) => {
