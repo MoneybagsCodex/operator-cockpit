@@ -4,61 +4,71 @@ import { useState, useEffect, useMemo } from 'react';
 import { ChevronDown, AlertCircle } from 'lucide-react';
 
 function DashboardContent({ markdown }: { markdown: string }) {
-  // Extract priority tasks section and render as cards
-  const priorityTasks = useMemo(() => {
+  const content = useMemo(() => {
     const lines = markdown.split('\n');
-    const taskLines: string[] = [];
-    let inTasks = false;
+    const result: { section: string; data: string[] }[] = [];
+    let currentSection = '';
+    let currentData: string[] = [];
 
-    for (const line of lines) {
-      if (line.includes('Priority Tasks')) {
-        inTasks = true;
-        continue;
-      }
-      if (inTasks && line.startsWith('##')) {
-        break;
-      }
-      if (inTasks && line.trim() && !line.startsWith('|') && !line.startsWith('---')) {
-        taskLines.push(line);
+    for (let i = 0; i < lines.length && i < 100; i++) {
+      const line = lines[i];
+
+      // Section headers (##)
+      if (line.startsWith('## ')) {
+        if (currentSection && currentData.length > 0) {
+          result.push({ section: currentSection, data: currentData });
+        }
+        currentSection = line.replace('## ', '').trim();
+        currentData = [];
+      } else if (currentSection && line.trim() && !line.startsWith('|') && !line.startsWith('---') && !line.startsWith('#')) {
+        // Extract meaningful lines
+        if (line.includes(':') || line.match(/^[-*]/)) {
+          currentData.push(line.trim());
+        }
       }
     }
 
-    return taskLines.slice(0, 10);
+    if (currentSection && currentData.length > 0) {
+      result.push({ section: currentSection, data: currentData });
+    }
+
+    return result;
   }, [markdown]);
 
   return (
     <div className="space-y-2">
-      {/* Header */}
-      <div className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-2">
-        Quick Tasks
-      </div>
+      {content.length === 0 ? (
+        <div className="text-[10px] text-slate-400 italic">Loading dashboard data…</div>
+      ) : (
+        content.slice(0, 3).map((section, idx) => (
+          <div key={idx} className="space-y-1">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-blue-400 px-1">
+              {section.section}
+            </div>
+            <div className="space-y-0.5 px-1">
+              {section.data.slice(0, 3).map((line, i) => {
+                const cleanLine = line.replace(/^[-*]\s+/, '').trim();
+                // Split on colon for key-value pairs
+                const [key, ...valueParts] = cleanLine.split(':');
+                const value = valueParts.join(':').trim();
 
-      {/* Task cards */}
-      <div className="space-y-1.5">
-        {priorityTasks
-          .filter(line => line.trim() && !line.startsWith('#'))
-          .slice(0, 5)
-          .map((task, i) => {
-            const cleanTask = task.replace(/^[-*]\s+/, '').trim();
-            if (!cleanTask) return null;
-            return (
-              <div
-                key={i}
-                className="group flex items-start gap-2 px-2 py-1.5 rounded bg-slate-800/50 border border-slate-700/50 hover:border-blue-500/30 hover:bg-slate-800 transition-all"
-              >
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0 mt-1.5" />
-                <p className="text-[10px] text-slate-300 leading-tight flex-1 break-words line-clamp-2">
-                  {cleanTask.length > 60 ? `${cleanTask.slice(0, 60)}…` : cleanTask}
-                </p>
-              </div>
-            );
-          })}
-      </div>
-
-      {/* Last updated */}
-      <div className="text-[9px] text-slate-500 italic pt-1 border-t border-slate-700/50">
-        See full dashboard for complete priority list
-      </div>
+                return (
+                  <div key={i} className="text-[9px] leading-tight">
+                    {value ? (
+                      <>
+                        <span className="text-slate-400">{key}:</span>{' '}
+                        <span className="text-slate-300 font-medium truncate">{value.slice(0, 40)}</span>
+                      </>
+                    ) : (
+                      <span className="text-slate-300">{cleanLine.slice(0, 50)}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))
+      )}
     </div>
   );
 }
