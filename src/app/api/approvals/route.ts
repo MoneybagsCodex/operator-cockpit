@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readApprovals, writeApproval } from '@/src/lib/state';
+import { readApprovals, writeApproval, decideApproval, isAutoApprovedForAgent } from '@/src/lib/state';
 import { ApprovalRequest } from '@/src/types';
 
 export async function GET(req: NextRequest) {
@@ -16,5 +16,12 @@ export async function POST(req: NextRequest) {
   }
 
   writeApproval({ ...body, status: 'pending', createdAt: body.createdAt || new Date() });
+
+  // If auto-approve is enabled for this agent, immediately approve it
+  if (isAutoApprovedForAgent(body.agentId)) {
+    decideApproval(body.id, 'approved');
+    return NextResponse.json({ ok: true, id: body.id, auto_approved: true }, { status: 201 });
+  }
+
   return NextResponse.json({ ok: true, id: body.id }, { status: 201 });
 }
