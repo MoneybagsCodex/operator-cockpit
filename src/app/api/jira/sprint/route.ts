@@ -99,13 +99,31 @@ function inSprintOrUnsprinted(issue: JiraIssue, sprintLabel: string | null): boo
   return !labels.some((l) => SPRINT_LABEL_RE.test(l));  // else only if it has NO sprint label
 }
 
+// Demo data for when JIRA is not configured
+const DEMO_TICKETS = {
+  inProgress: [
+    { key: 'PROJ-42', summary: 'Implement auto-approve feature for agent commands', status: 'In Progress', statusCategory: 'indeterminate', priority: 'High', issueType: 'Task', projectKey: 'PROJ', points: 5, url: 'https://jira.example.com/browse/PROJ-42' },
+    { key: 'PROJ-38', summary: 'Add color-coded terminal tabs by project', status: 'In Progress', statusCategory: 'indeterminate', priority: 'Medium', issueType: 'Task', projectKey: 'PROJ', points: 3, url: 'https://jira.example.com/browse/PROJ-38' },
+  ],
+  sprint: [
+    { key: 'PROJ-51', summary: 'Fix system prompt not applying to spawned agents', status: 'To Do', statusCategory: 'new', priority: 'High', issueType: 'Bug', projectKey: 'PROJ', points: 3, url: 'https://jira.example.com/browse/PROJ-51' },
+    { key: 'PROJ-44', summary: 'Add wiki health indicator + sync-check integration', status: 'To Do', statusCategory: 'new', priority: 'Medium', issueType: 'Story', projectKey: 'PROJ', points: 8, url: 'https://jira.example.com/browse/PROJ-44' },
+    { key: 'PROJ-39', summary: 'Add working directory dropdown to agent creation', status: 'To Do', statusCategory: 'new', priority: 'Low', issueType: 'Enhancement', projectKey: 'PROJ', points: 2, url: 'https://jira.example.com/browse/PROJ-39' },
+  ],
+  submitted: [
+    { key: 'PROJ-35', summary: 'Dockerize cockpit for cloud deployment', status: 'Submitted', statusCategory: 'done', priority: 'Medium', issueType: 'Task', projectKey: 'PROJ', points: 5, url: 'https://jira.example.com/browse/PROJ-35' },
+    { key: 'PROJ-32', summary: 'Update operator identity system documentation', status: 'Submitted', statusCategory: 'done', priority: 'Low', issueType: 'Documentation', projectKey: 'PROJ', points: 2, url: 'https://jira.example.com/browse/PROJ-32' },
+  ],
+  sprintLabel: 'Sprint-9/15',
+};
+
 export async function GET() {
   const email = process.env.JIRA_EMAIL;
   const token = process.env.JIRA_TOKEN;
   const baseUrl = process.env.JIRA_BASE_URL || 'https://your-domain.atlassian.net';
 
   if (!email || !token) {
-    return NextResponse.json({ error: 'JIRA_EMAIL and JIRA_TOKEN required in .env.local' }, { status: 503 });
+    return NextResponse.json(DEMO_TICKETS, { status: 200 });
   }
 
   const auth = Buffer.from(`${email}:${token}`).toString('base64');
