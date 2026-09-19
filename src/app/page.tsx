@@ -1,5 +1,17 @@
 'use client';
 
+// Suppress harmless MetaMask extension errors
+if (typeof window !== 'undefined') {
+  const originalError = console.error;
+  console.error = (...args: any[]) => {
+    const message = args[0]?.toString?.() || '';
+    if (message.includes('MetaMask') || message.includes('Failed to connect')) {
+      return;
+    }
+    originalError.apply(console, args);
+  };
+}
+
 import { mockDashboardState } from '@/src/data/mock';
 import { ChatThread } from '@/src/components/ChatThread';
 import { ApprovalQueue } from '@/src/components/ApprovalQueue';
