@@ -678,7 +678,7 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
               title={
                 panelMaximized ? 'Exit full screen (Esc)' :
                 effectiveMaximized ? 'Exit full screen (Esc)' :
-                nested ? 'Expand whole group (Cmd+Alt+Click for solo)' :
+                nested ? 'Expand whole group (Cmd+Option+Click for solo)' :
                 'Expand to full screen'
               }
               aria-label={panelMaximized || effectiveMaximized ? 'Exit full screen' : 'Expand to full screen'}
