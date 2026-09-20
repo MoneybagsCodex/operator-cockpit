@@ -34,6 +34,10 @@ interface TerminalPanelProps {
   /** Nested panels only: toggle the whole group's fullscreen state — expand here
    * always expands every member together, not just this one panel. */
   onExpandGroup?: () => void;
+  /** Nested panels only: is THIS PANEL currently fullscreen (fullscreen solo, not the group)? */
+  panelMaximized?: boolean;
+  /** Nested panels only: toggle THIS PANEL's fullscreen state (expand just this one). */
+  onExpandPanel?: () => void;
 }
 
 // Extract session ID from WebSocket URL
@@ -91,7 +95,7 @@ function agentColor(agentName: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
-export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, onFork, onClose, nested, onDragStartPanel, onMergeDrop, onReorderDrop, onLeaveGroup, groupMaximized, onExpandGroup }: TerminalPanelProps) {
+export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, onFork, onClose, nested, onDragStartPanel, onMergeDrop, onReorderDrop, onLeaveGroup, groupMaximized, onExpandGroup, panelMaximized, onExpandPanel }: TerminalPanelProps) {
   const [mergeDragOver, setMergeDragOver] = useState(false); // another cell is being dragged over this one's header (merge target)
   const [reorderDragOver, setReorderDragOver] = useState(false); // another cell is being dragged over this one's body (reorder target)
 
@@ -652,20 +656,33 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
             >
               {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
             </button>
-            {/* Full-screen toggle: <> to expand, X to come back. Nested panels
-                delegate to the whole group — expand here expands every member
-                together, arranged vertically, not just this one panel.
+            {/* Full-screen toggle: <> to expand, X to come back.
+                Nested panels can expand just this one (Cmd+Alt+Click) or the whole group.
                 While full-screen this is the ONLY way back (besides Esc), so it
-                gets button styling + contrast — as a faint 14px glyph it read as
-                the close button and users couldn't find how to un-expand. */}
+                gets button styling + contrast. */}
             <button
-              onClick={() => (nested ? onExpandGroup?.() : setMaximized((m) => !m))}
-              className={effectiveMaximized
+              onClick={(e) => {
+                if (nested) {
+                  if (e.altKey && e.metaKey) {
+                    onExpandPanel?.(); // Expand just this panel (Cmd+Alt+Click)
+                  } else {
+                    onExpandGroup?.(); // Expand whole group (regular click)
+                  }
+                } else {
+                  setMaximized((m) => !m);
+                }
+              }}
+              className={(panelMaximized || effectiveMaximized)
                 ? 'flex items-center gap-1 rounded bg-slate-700 px-2 py-1 text-slate-100 hover:bg-slate-600 transition-colors'
                 : 'text-slate-500 hover:text-cyan-400 transition-colors'}
-              title={effectiveMaximized ? 'Exit full screen (Esc)' : nested ? 'Expand whole group to full screen' : 'Expand to full screen'}
-              aria-label={effectiveMaximized ? 'Exit full screen' : 'Expand to full screen'}
-              aria-pressed={effectiveMaximized}
+              title={
+                panelMaximized ? 'Exit full screen (Esc)' :
+                effectiveMaximized ? 'Exit full screen (Esc)' :
+                nested ? 'Expand whole group (Cmd+Alt+Click for solo)' :
+                'Expand to full screen'
+              }
+              aria-label={panelMaximized || effectiveMaximized ? 'Exit full screen' : 'Expand to full screen'}
+              aria-pressed={panelMaximized || effectiveMaximized}
             >
               {effectiveMaximized ? (
                 <>

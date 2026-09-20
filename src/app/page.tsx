@@ -75,6 +75,8 @@ export default function Dashboard() {
   // Which group (by cell key) is currently fullscreen, if any — expanding any
   // one member expands the whole group together, stacked vertically.
   const [maximizedGroupKey, setMaximizedGroupKey] = useState<string | null>(null);
+  // Which individual panel (by id) is fullscreen solo, if any — only one panel visible.
+  const [maximizedPanelId, setMaximizedPanelId] = useState<string | null>(null);
   const [gridDragOver, setGridDragOver] = useState(false); // dragging over empty grid space (not any cell)
   const [sidebarOpen, setSidebarOpen] = useState(true); // sidebar visibility toggle — ALWAYS starts open
   const [projectsCollapsed, setProjectsCollapsed] = useState(false); // Projects section collapse toggle
@@ -704,12 +706,38 @@ export default function Dashboard() {
               setDropTargetIndex(null);
             }}
           >
+            {/* If a single panel is fullscreen, show only that — hide the grid entirely */}
+            {maximizedPanelId && (
+              <div className="col-span-full h-full min-h-0 flex flex-col">
+                {terminalPanels
+                  .filter((p) => p.id === maximizedPanelId)
+                  .map((tp) => (
+                    <div key={tp.id} className="flex-1 min-h-0 flex flex-col">
+                      <TerminalPanel
+                        nested
+                        title={sessionNames[tp.rawId] ?? tp.title}
+                        wsUrl={tp.wsUrl}
+                        trustSignal={trustSignal}
+                        linkColor={tp.rawId.startsWith('jira-') ? jiraLinkColors[tp.rawId.slice('jira-'.length)] : undefined}
+                        onRename={(name) => renameSession(tp.rawId, name)}
+                        onFork={forkSession}
+                        onClose={() => closeTerminal(tp.id)}
+                        onLeaveGroup={() => leaveGroup(tp.id)}
+                        groupMaximized={false}
+                        panelMaximized={true}
+                        onExpandPanel={() => setMaximizedPanelId(null)}
+                      />
+                    </div>
+                  ))}
+              </div>
+            )}
+
             {/* Live embedded terminal sessions (newest first). One grid cell per
                 live session, or per group — capped at MAX_SESSIONS live sessions.
                 Drag a panel's (or a group's) header onto another cell's header to
                 merge them into one group; drop on a cell's body to reorder, or on
                 empty grid space to send it to the end. */}
-            {cells.map((cell) => {
+            {!maximizedPanelId && cells.map((cell) => {
               const single = cell.panels.length === 1 ? cell.panels[0] : null;
               if (single) {
                 return (
@@ -792,6 +820,8 @@ export default function Dashboard() {
                         onLeaveGroup={() => leaveGroup(tp.id)}
                         groupMaximized={isGroupMaximized}
                         onExpandGroup={() => setMaximizedGroupKey((k) => (k === cell.key ? null : cell.key))}
+                        panelMaximized={maximizedPanelId === tp.id}
+                        onExpandPanel={() => setMaximizedPanelId((p) => (p === tp.id ? null : tp.id))}
                       />
                     </div>
                   ))}
