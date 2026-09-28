@@ -656,35 +656,48 @@ export function TerminalPanel({ title, wsUrl, trustSignal, linkColor, onRename, 
             >
               {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
             </button>
-            {/* Full-screen toggle: <> to expand, X to come back.
-                Nested panels can expand just this one (Cmd+Alt+Click) or the whole group.
-                While full-screen this is the ONLY way back (besides Esc), so it
-                gets button styling + contrast. */}
+            {/* Solo expand button (nested only): expand just this terminal */}
+            {nested && onExpandPanel && (
+              <button
+                onClick={() => onExpandPanel()}
+                className={panelMaximized
+                  ? 'flex items-center gap-1 rounded bg-slate-700 px-2 py-1 text-slate-100 hover:bg-slate-600 transition-colors'
+                  : 'text-slate-500 hover:text-cyan-400 transition-colors'}
+                title={panelMaximized ? 'Exit full screen (Esc)' : 'Expand solo'}
+                aria-label={panelMaximized ? 'Exit full screen' : 'Expand solo'}
+                aria-pressed={panelMaximized}
+              >
+                {panelMaximized ? (
+                  <>
+                    <X className="w-4 h-4" />
+                    <span className="text-[11px] font-medium leading-none">Exit</span>
+                  </>
+                ) : (
+                  <ChevronsLeftRight className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
+            {/* Group expand button: expand whole group or standalone terminal */}
             <button
-              onClick={(e) => {
+              onClick={() => {
                 if (nested) {
-                  if (e.altKey && e.metaKey) {
-                    onExpandPanel?.(); // Expand just this panel (Cmd+Alt+Click)
-                  } else {
-                    onExpandGroup?.(); // Expand whole group (regular click)
-                  }
+                  onExpandGroup?.();
                 } else {
                   setMaximized((m) => !m);
                 }
               }}
-              className={(panelMaximized || effectiveMaximized)
+              className={(effectiveMaximized && !panelMaximized)
                 ? 'flex items-center gap-1 rounded bg-slate-700 px-2 py-1 text-slate-100 hover:bg-slate-600 transition-colors'
                 : 'text-slate-500 hover:text-cyan-400 transition-colors'}
               title={
-                panelMaximized ? 'Exit full screen (Esc)' :
-                effectiveMaximized ? 'Exit full screen (Esc)' :
-                nested ? 'Expand whole group (Cmd+Option+Click for solo)' :
+                effectiveMaximized && !panelMaximized ? 'Exit full screen (Esc)' :
+                nested ? 'Expand whole group' :
                 'Expand to full screen'
               }
-              aria-label={panelMaximized || effectiveMaximized ? 'Exit full screen' : 'Expand to full screen'}
-              aria-pressed={panelMaximized || effectiveMaximized}
+              aria-label={effectiveMaximized && !panelMaximized ? 'Exit full screen' : 'Expand to full screen'}
+              aria-pressed={effectiveMaximized && !panelMaximized}
             >
-              {effectiveMaximized ? (
+              {effectiveMaximized && !panelMaximized ? (
                 <>
                   <X className="w-4 h-4" />
                   <span className="text-[11px] font-medium leading-none">Exit full screen</span>
