@@ -26,6 +26,7 @@ import { BootSplash } from '@/src/components/BootSplash';
 import { KnowledgeSyncPanel } from '@/src/components/KnowledgeSyncPanel';
 import { RecoveryBanner } from '@/src/components/RecoveryBanner';
 import { DashboardViewer } from '@/src/components/DashboardViewer';
+import { VoiceControlPanel } from '@/src/components/VoiceControlPanel';
 import { useLiveState } from '@/src/hooks/useLiveState';
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Menu, X } from 'lucide-react';
@@ -847,6 +848,8 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      <VoiceControlPanel />
     </>
   );
 }
