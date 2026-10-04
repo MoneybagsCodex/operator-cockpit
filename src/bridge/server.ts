@@ -368,8 +368,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   // GET /terminals — list all live terminal sessions
-  if (req.method === 'GET' && url === '/terminals') {
-    return jsonResponse(res, 200, { sessions: listSessions() });
+  if (req.method === 'GET' && (url === '/terminals' || url.startsWith('/terminals?'))) {
+    const tail = parseInt(new URL(url, 'http://x').searchParams.get('tail') ?? '200', 10) || 200;
+    return jsonResponse(res, 200, { sessions: listSessions(Math.min(tail, 20000)) });
   }
 
   // POST /terminal/:sid/input — write input to a live terminal session
@@ -378,8 +379,8 @@ const server = http.createServer(async (req, res) => {
       const sid = decodeURIComponent(url.slice('/terminal/'.length).split('/')[0]);
       const body = await readBody(req);
       const { text, submit } = JSON.parse(body) as { text?: string; submit?: boolean };
-      if (!text) {
-        return jsonResponse(res, 400, { ok: false, error: 'text is required' });
+      if (typeof text !== 'string' || (text === '' && !submit)) {
+        return jsonResponse(res, 400, { ok: false, error: 'text is required (empty text only with submit)' });
       }
       const success = writeToSession(sid, text, submit ?? false);
       if (!success) {

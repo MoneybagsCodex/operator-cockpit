@@ -119,18 +119,30 @@ export function writeToSession(sid: string, text: string, submit: boolean = fals
   }
 }
 
-export function listSessions() {
+export function listSessions(tailChars: number = 200) {
+  // Claude's TUI places words with cursor-forward (ESC[nC) / column (ESC[nG) moves instead of
+  // literal spaces, so map those to one space before stripping everything else.
+  const ansi = /\x1b\[[0-9;?>]*[ -\/]*[@-~]|\x1b\][^\x07]*\x07/g;
+  const clean = (s: string) => s.replace(/\x1b\[\d*[CG]/g, ' ').replace(ansi, '').replace(/\r/g, '')
+    .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
+  const metaDir = path.join(
+    process.env.OPERATOR_STATE_DIR ?? path.join(os.homedir(), '.operator-state'),
+    'session-metadata',
+  );
   const list = [];
   for (const [sid, session] of sessions) {
-    const bufferTail = session.buffer ? session.buffer.toString().slice(-200) : '';
+    let label = '';
+    try {
+      label = JSON.parse(fs.readFileSync(path.join(metaDir, `${sid}.json`), 'utf-8')).name ?? '';
+    } catch { /* no metadata for this session */ }
     list.push({
       sid,
-      agent: session.metadata?.agentId || '',
-      label: session.metadata?.label || '',
-      cwd: session.metadata?.workDir || '',
+      agent: session.agentId || '',
+      label: label || session.agentId || sid.slice(0, 8),
       pid: session.term.pid,
       startedAt: session.startedAt,
-      bufferTail,
+      attached: !!session.ws,
+      bufferTail: clean(session.buffer.slice(-tailChars * 6)).slice(-tailChars),
     });
   }
   return list;
