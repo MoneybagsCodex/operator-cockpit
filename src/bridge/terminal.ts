@@ -107,6 +107,35 @@ export function getSessionMetrics(): Record<string, unknown> {
   return { sessions: metrics };
 }
 
+export function writeToSession(sid: string, text: string, submit: boolean = false): boolean {
+  const session = sessions.get(sid);
+  if (!session) return false;
+  try {
+    const toWrite = submit ? text + '\r' : text;
+    session.term.write(toWrite);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function listSessions() {
+  const list = [];
+  for (const [sid, session] of sessions) {
+    const bufferTail = session.buffer ? session.buffer.toString().slice(-200) : '';
+    list.push({
+      sid,
+      agent: session.metadata?.agentId || '',
+      label: session.metadata?.label || '',
+      cwd: session.metadata?.workDir || '',
+      pid: session.term.pid,
+      startedAt: session.startedAt,
+      bufferTail,
+    });
+  }
+  return list;
+}
+
 function loadAgentConfig(stateDir: string, agentId: string): AgentConfig | null {
   try {
     return JSON.parse(

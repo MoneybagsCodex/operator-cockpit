@@ -19,7 +19,7 @@ import http from 'http';
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { attachTerminalServer, getSessionMetrics } from './terminal';
+import { attachTerminalServer, getSessionMetrics, writeToSession, listSessions } from './terminal';
 
 const PORT = parseInt(process.env.BRIDGE_PORT ?? '3002', 10);
 
@@ -365,6 +365,30 @@ const server = http.createServer(async (req, res) => {
   // GET /metrics — return metrics for all active terminal sessions
   if (req.method === 'GET' && url === '/metrics') {
     return jsonResponse(res, 200, getSessionMetrics());
+  }
+
+  // GET /terminals — list all live terminal sessions
+  if (req.method === 'GET' && url === '/terminals') {
+    return jsonResponse(res, 200, { sessions: listSessions() });
+  }
+
+  // POST /terminal/:sid/input — write input to a live terminal session
+  if (req.method === 'POST' && url.startsWith('/terminal/')) {
+    try {
+      const sid = decodeURIComponent(url.slice('/terminal/'.length).split('/')[0]);
+      const body = await readBody(req);
+      const { text, submit } = JSON.parse(body) as { text?: string; submit?: boolean };
+      if (!text) {
+        return jsonResponse(res, 400, { ok: false, error: 'text is required' });
+      }
+      const success = writeToSession(sid, text, submit ?? false);
+      if (!success) {
+        return jsonResponse(res, 404, { ok: false, error: 'Session not found' });
+      }
+      return jsonResponse(res, 200, { ok: true });
+    } catch (err) {
+      return jsonResponse(res, 400, { ok: false, error: String(err) });
+    }
   }
 
   // DELETE /session/:agentId  — reset conversation (next send starts fresh)
